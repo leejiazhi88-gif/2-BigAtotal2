@@ -1,6 +1,6 @@
 param(
   [string]$Owner = "leejiazhi88-gif",
-  [string]$Repo = "BigAtotal2",
+  [string]$Repo = "2-BigAtotal2",
   [string]$Branch = "main",
   [string]$Message = "Sync dashboard files"
 )

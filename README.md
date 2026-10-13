@@ -2,6 +2,11 @@
 
 这是一个静态 HTML 行业研究看板，基于飞书表格中的模块设计，并使用真实行情数据生成页面输出。
 
+## 地址
+
+- GitHub：<https://github.com/leejiazhi88-gif/2-BigAtotal2>
+- 在线页面：<https://leejiazhi88-gif.github.io/2-BigAtotal2/>
+
 ## 页面
 
 - 主页面：`outputs/index.html`

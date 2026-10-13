@@ -1,6 +1,6 @@
 param(
   [string]$Owner = "leejiazhi88-gif",
-  [string]$Repo = "BigAtotal2",
+  [string]$Repo = "2-BigAtotal2",
   [string]$Title = "codex-biga-total2",
   [string]$PublicKeyPath = "$env:USERPROFILE\.ssh\id_ed25519_codex_biga_total2.pub"
 )
