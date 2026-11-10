@@ -579,39 +579,8 @@
             <div class="chart-wrap module-chart"><canvas id="moduleChart2"></canvas><div class="tip"></div></div>
           </article>
 
-          <article class="module-card panel">
-            <div class="module-head">
-              <div class="module-index">3</div>
-              <div>
-                <div class="module-title">情绪·大资金</div>
-                <div class="module-desc">北向资金、大宗交易、ETF 份额变化、机构仓位等资金行为指标。</div>
-              </div>
-            </div>
-            <div class="module-kpis" id="moduleKpi3"></div>
-            <div class="chart-top">
-              <div><div class="chart-title">大资金线索</div><div class="chart-desc">已接入北向资金与大宗交易；走势按区间起点=100归一</div></div>
-              <div class="legend" id="legend-module3"></div>
-            </div>
-            <div class="chart-wrap module-chart"><canvas id="moduleChart3"></canvas><div class="tip"></div></div>
-          </article>
-
-          <article class="module-card panel">
-            <div class="module-head">
-              <div class="module-index">4</div>
-              <div>
-                <div class="module-title">情绪·官方</div>
-                <div class="module-desc">IPO 融资、再融资、产业资本净减持、政策利率、社融/M2 等官方与制度变量。</div>
-              </div>
-            </div>
-            <div class="module-kpis" id="moduleKpi4"></div>
-            <div class="chart-top">
-              <div><div class="chart-title">官方供给与政策变量</div><div class="chart-desc">已接入 IPO 近 12 个月融资额；走势按区间起点=100归一</div></div>
-              <div class="legend" id="legend-module4"></div>
-            </div>
-            <div class="chart-wrap module-chart"><canvas id="moduleChart4"></canvas><div class="tip"></div></div>
-          </article>
         </section>
-        <div class="footnote">说明：本页行业分类、指数点位、区间涨跌、PE、市值排序均来自 Tushare 申万 SW2021 行情；滚动年利润为 total_mv / PE 的隐含 TTM 利润。1-4 模块来自 Tushare daily_basic / daily / margin / moneyflow_hsgt / block_trade / new_share。若某指标暂未接入稳定口径，则显示暂无真实数据。</div>
+        <div class="footnote">说明：本页行业分类、指数点位、区间涨跌、PE、市值排序均来自 Tushare 申万 SW2021 行情；滚动年利润为 total_mv / PE 的隐含 TTM 利润。估值与交易热度模块来自 Tushare daily_basic / daily / margin。若某指标暂未接入稳定口径，则显示暂无真实数据。</div>
       </main>
     </div>
   </div>
@@ -698,31 +667,6 @@
           { key: "limitUpCount", name: "涨停数" }
         ]
       },
-      {
-        id: 3,
-        metrics: [
-          { key: "northMoney", label: "北向资金（Tushare口径）", format: "plain" },
-          { key: "blockTradeAmount", label: "大宗交易成交额", format: "yi" },
-          { key: "etfShare", label: "ETF份额变化", format: "missing" },
-          { key: "fundPosition", label: "机构仓位", format: "missing" }
-        ],
-        lines: [
-          { key: "northMoney", name: "北向资金" },
-          { key: "blockTradeAmount", name: "大宗交易" }
-        ]
-      },
-      {
-        id: 4,
-        metrics: [
-          { key: "ipoFinancing12m", label: "IPO近12个月融资额", format: "yi" },
-          { key: "refinance", label: "再融资额", format: "missing" },
-          { key: "policyRate", label: "政策利率", format: "missing" },
-          { key: "socialFinancing", label: "社融/M2增速", format: "missing" }
-        ],
-        lines: [
-          { key: "ipoFinancing12m", name: "IPO融资额" }
-        ]
-      }
     ];
 
     function periodData(name, years) {
@@ -1070,8 +1014,6 @@
     charts.push(new LineChart(document.getElementById("peChart"), "pe"));
     moduleCharts.push(new LineChart(document.getElementById("moduleChart1"), "module"));
     moduleCharts.push(new LineChart(document.getElementById("moduleChart2"), "module"));
-    moduleCharts.push(new LineChart(document.getElementById("moduleChart3"), "module"));
-    moduleCharts.push(new LineChart(document.getElementById("moduleChart4"), "module"));
 
     document.querySelectorAll(".period").forEach(btn => btn.onclick = () => {
       document.querySelectorAll(".period").forEach(b => b.classList.remove("active"));
