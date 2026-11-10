@@ -612,8 +612,8 @@
     </div>
   </div>
 
-  <script src="sector_real_data.js?v=20261016"></script>
-  <script src="market_modules_data.js?v=20261016"></script>
+  <script src="sector_real_data.js?v=20261109-20261110164021"></script>
+  <script src="market_modules_data.js?v=20261110-20261110164421"></script>
   <script>
     const realData = window.SECTOR_REAL_DATA || null;
     const marketData = window.MARKET_MODULES_DATA || null;
@@ -797,16 +797,21 @@
       const box = document.getElementById(`moduleKpi${config.id}`);
       box.innerHTML = config.metrics.map(metric => {
         const value = formatModuleValue(latest[metric.key], metric.format, metric.key);
-        const note = metric.format === "rank" ? `<span class="module-kpi-note">近${state.years}年</span>` : "";
+        const sourceDate = marketData?.latestDates?.[metric.key];
+        const note = metric.format === "rank"
+          ? `<span class="module-kpi-note">近${state.years}年</span>`
+          : sourceDate && sourceDate !== marketData?.asOf
+            ? `<span class="module-kpi-note">截至 ${formatAsOf(sourceDate)}</span>`
+            : "";
         return `<div class="module-kpi"><div class="module-kpi-label">${metric.label}</div><div class="module-kpi-value">${value}${note}</div></div>`;
       }).join("");
     }
 
     function normalizeTo100(values) {
       const raw = values || [];
-      const base = raw.find(value => Number.isFinite(Number(value)) && Number(value) !== 0);
+      const base = raw.find(value => Number.isFinite(value) && value !== 0);
       if (base === undefined) return raw.map(() => null);
-      return raw.map(value => Number.isFinite(Number(value)) ? Number((Number(value) / Number(base) * 100).toFixed(2)) : null);
+      return raw.map(value => Number.isFinite(value) ? Number((value / base * 100).toFixed(2)) : null);
     }
 
     function updateModules() {
@@ -990,7 +995,7 @@
       const all = {};
       document.getElementById("priceDesc").textContent =
         state.years === 20
-          ? "申万 SW2021 行业指数暂无 20 年完整历史；下方 1-4 市场模块仍可查看 20 年真实数据"
+          ? "仅展示具备完整 20 年历史的行业；历史不足的行业保留为空"
           : "申万真实行情采样点，区间起点归一为 100";
       ["price","profit","pe"].forEach(kind => {
         all[kind] = picks.map(s => ({
@@ -1014,7 +1019,9 @@
         const period = periodData(pick.name, state.years);
         const ret = period?.return;
         return {
-          name: pick.name,
+          name: latest.date && latest.date !== realData?.asOf
+            ? `${pick.name}（截至 ${formatAsOf(latest.date)}）`
+            : pick.name,
           price: latest.close !== null && latest.close !== undefined ? latest.close.toFixed(2) : "暂无",
           ret: ret !== null && ret !== undefined ? `${ret >= 0 ? "+" : ""}${ret.toFixed(1)}%` : "暂无",
           retClass: ret === null || ret === undefined ? "" : (ret >= 0 ? "up" : "down"),
