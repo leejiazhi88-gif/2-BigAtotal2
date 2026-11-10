@@ -183,9 +183,11 @@ def build_history(rows):
         row["profit"] = implied_profit(row)
     latest = rows[-1] if rows else {}
     periods = {}
-    max_points = {"1": 64, "3": 72, "5": 72, "10": 84, "20": 96}
-    for years in PERIOD_YEARS:
-        sample = sample_rows(rows, shift_years(END_DATE, int(years)), max_points[years])
+    max_points = {"1": 64, "3": 72, "5": 72, "10": 84, "20": 96, "all": 160}
+    for years in (*PERIOD_YEARS, "all"):
+        start = rows[0]["trade_date"] if years == "all" and rows else (
+            START_DATE if years == "all" else shift_years(END_DATE, int(years)))
+        sample = sample_rows(rows, start, max_points[years])
         if not sample:
             periods[years] = None
             continue
@@ -200,7 +202,10 @@ def build_history(rows):
                 rank = sum(1 for value in ordered if value <= float(latest_pe))
                 pe_percentile = round(rank / len(ordered) * 100)
         periods[years] = {
-            "labels": [f'{row["trade_date"][:4]}-{row["trade_date"][4:6]}' for row in sample],
+            "labels": [
+                ymd(row["trade_date"]).strftime("%Y-%m-%d" if years == "all" else "%Y-%m")
+                for row in sample
+            ],
             "price": normalize_series(sample, "close"),
             "profit": normalize_series(sample, "profit"),
             "pe": normalize_series(sample, "pe"),
@@ -226,6 +231,7 @@ def main():
     global END_DATE
     END_DATE = latest_sw_date(token)
     periods = {years: shift_years(END_DATE, int(years)) for years in PERIOD_YEARS}
+    periods["all"] = START_DATE
     print(f"latest SW date: {END_DATE}", flush=True)
     l1_rows = call_api(token, "index_classify", {"src": "SW2021", "level": "L1"}, "index_code,industry_name,parent_code,level,industry_code")
     l2_rows = call_api(token, "index_classify", {"src": "SW2021", "level": "L2"}, "index_code,industry_name,parent_code,level")

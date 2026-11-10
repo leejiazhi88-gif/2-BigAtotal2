@@ -167,6 +167,8 @@ def sample_dates(token, end_date, period_starts):
     if end_date not in union:
         union.append(end_date)
         union.sort()
+    # Reuse every existing historical observation, from the earliest to latest.
+    by_period["all"] = union.copy()
     return by_period, union
 
 
@@ -272,6 +274,7 @@ def main():
     period_starts = {years: shift_years(end_date, int(years)) for years in PERIOD_YEARS}
     print(f"latest market date: {end_date}", flush=True)
     by_period, dates = sample_dates(token, end_date, period_starts)
+    period_starts["all"] = dates[0]
     metrics_by_date = {}
     for idx, date in enumerate(dates, 1):
         print(f"[{idx}/{len(dates)}] {date}", flush=True)
@@ -308,6 +311,8 @@ def main():
         rows = [metrics_by_date[date] for date in period_dates if date in metrics_by_date]
         periods[years] = {
             "labels": labels(rows),
+            "startDate": rows[0]["date"],
+            "endDate": rows[-1]["date"],
             "series": {
                 "peMedian": series(rows, "peMedian"),
                 "pbMedian": series(rows, "pbMedian"),

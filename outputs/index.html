@@ -244,6 +244,8 @@
 
     .periods {
       display: flex;
+      max-width: 100%;
+      overflow-x: auto;
       padding: 3px;
       border: 1px solid var(--line);
       border-radius: 9px;
@@ -251,6 +253,7 @@
     }
 
     .period {
+      flex-shrink: 0;
       min-width: 48px;
       padding: 7px 10px;
       border: 0;
@@ -507,6 +510,7 @@
             <button class="period" data-years="5">5年</button>
             <button class="period" data-years="10">10年</button>
             <button class="period" data-years="20">20年</button>
+            <button class="period" data-years="all">全部</button>
           </div>
         </section>
 
@@ -612,8 +616,8 @@
     </div>
   </div>
 
-  <script src="sector_real_data.js?v=20261109-20261110164021"></script>
-  <script src="market_modules_data.js?v=20261110-20261110164421"></script>
+  <script src="sector_real_data.js?v=20261110-20261110184412"></script>
+  <script src="market_modules_data.js?v=20261110-20261110184309"></script>
   <script>
     const realData = window.SECTOR_REAL_DATA || null;
     const marketData = window.MARKET_MODULES_DATA || null;
@@ -799,7 +803,7 @@
         const value = formatModuleValue(latest[metric.key], metric.format, metric.key);
         const sourceDate = marketData?.latestDates?.[metric.key];
         const note = metric.format === "rank"
-          ? `<span class="module-kpi-note">近${state.years}年</span>`
+          ? `<span class="module-kpi-note">${state.years === "all" ? "全部历史" : `近${state.years}年`}</span>`
           : sourceDate && sourceDate !== marketData?.asOf
             ? `<span class="module-kpi-note">截至 ${formatAsOf(sourceDate)}</span>`
             : "";
@@ -892,8 +896,20 @@
       }
 
       setData(series, labels, emptyMessage = "暂无足够真实数据") {
+        if (state.years === "all" && series.some(s => s.labels?.length)) {
+          labels = [...new Set(series.flatMap(s => s.labels || []))].sort();
+          series = series.map(s => {
+            const byDate = new Map((s.labels || []).map((date, i) => [date, s.values[i]]));
+            return { ...s, values: labels.map(date => byDate.get(date)) };
+          });
+        }
         this.data = series;
         this.labels = labels;
+        const dates = labels.map(label => Date.parse(label.length === 7 ? label + "-01" : label));
+        const span = dates.at(-1) - dates[0];
+        this.positions = labels.map((_, i) => state.years === "all" && span > 0
+          ? (dates[i] - dates[0]) / span
+          : i / Math.max(1, labels.length - 1));
         this.emptyMessage = emptyMessage;
         this.draw();
       }
@@ -928,7 +944,7 @@
         x.textAlign = "center";
         for (let i=0;i<tickCount;i++) {
           const idx = Math.round((this.labels.length-1)*i/(tickCount-1));
-          const xx = pad.l+(W-pad.l-pad.r)*idx/Math.max(1, this.labels.length-1);
+          const xx = pad.l+(W-pad.l-pad.r)*this.positions[idx];
           const label = this.labels[idx] || "";
           x.textAlign = i === 0 ? "left" : (i === tickCount - 1 ? "right" : "center");
           x.fillText(label, i === 0 ? pad.l : (i === tickCount - 1 ? W - 6 : xx), H-12);
@@ -938,11 +954,12 @@
           x.beginPath();
           let started = false;
           s.values.forEach((v,i) => {
+            if (v === undefined) return; // Another series has a sample on this date.
             if (!Number.isFinite(v)) {
               started = false;
               return;
             }
-            const xx = pad.l+(W-pad.l-pad.r)*i/Math.max(1, s.values.length-1);
+            const xx = pad.l+(W-pad.l-pad.r)*this.positions[i];
             const yy = pad.t+(H-pad.t-pad.b)*(hi-v)/(hi-lo);
             started ? x.lineTo(xx,yy) : x.moveTo(xx,yy);
             started = true;
@@ -957,8 +974,9 @@
         const r = this.canvas.getBoundingClientRect();
         const mx = e.clientX-r.left;
         if (mx < pad.l || mx > W-pad.r) return this.tip.style.display = "none";
-        const idx = Math.max(0, Math.min(this.labels.length-1,
-          Math.round((mx-pad.l)/(W-pad.l-pad.r)*(this.labels.length-1))));
+        const fraction = (mx-pad.l)/(W-pad.l-pad.r);
+        const idx = this.positions.reduce((best, position, i) =>
+          Math.abs(position-fraction) < Math.abs(this.positions[best]-fraction) ? i : best, 0);
         this.tip.innerHTML = `<strong>${this.labels[idx]}</strong>` + this.data.map((s,i) => {
           const value = s.values[idx];
           const text = Number.isFinite(value) ? `${value.toFixed(2)}${this.kind==="pe"?"x":""}` : "--";
@@ -994,7 +1012,9 @@
       }
       const all = {};
       document.getElementById("priceDesc").textContent =
-        state.years === 20
+        state.years === "all"
+          ? "各行业从最早可用数据展示至最新，按实际日期对齐，区间起点归一为 100"
+          : state.years === 20
           ? "仅展示具备完整 20 年历史的行业；历史不足的行业保留为空"
           : "申万真实行情采样点，区间起点归一为 100";
       ["price","profit","pe"].forEach(kind => {
@@ -1056,7 +1076,7 @@
     document.querySelectorAll(".period").forEach(btn => btn.onclick = () => {
       document.querySelectorAll(".period").forEach(b => b.classList.remove("active"));
       btn.classList.add("active");
-      state.years = +btn.dataset.years;
+      state.years = btn.dataset.years === "all" ? "all" : +btn.dataset.years;
       update();
     });
     document.getElementById("search").oninput = e => renderFilters(e.target.value);
