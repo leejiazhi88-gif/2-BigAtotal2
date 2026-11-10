@@ -569,7 +569,7 @@
             <div class="module-kpis" id="moduleKpi1"></div>
             <div class="module-controls" id="moduleControls1" aria-label="估值指标"></div>
             <div class="chart-top">
-              <div><div class="chart-title">估值走势</div><div class="chart-desc">展示所选行业指数的真实估值，可切换 PE 与 PB，并对比多个指数。</div></div>
+              <div><div class="chart-title" id="valuationChartTitle">估值走势</div><div class="chart-desc" id="valuationChartDesc">展示所选行业指数的真实估值，可切换 PE、PB 与 PE历史分位，并对比多个指数。</div></div>
               <div class="legend" id="legend-module1"></div>
             </div>
             <div class="chart-wrap module-chart"><canvas id="moduleChart1"></canvas><div class="tip"></div></div>
@@ -599,7 +599,7 @@
     </div>
   </div>
 
-  <script src="sector_real_data.js?v=20261110-20261110190417"></script>
+  <script src="sector_real_data.js?v=99bd6d7cd8f3"></script>
   <script>
     const realData = window.SECTOR_REAL_DATA || null;
     const formatAsOf = value => value && value.length === 8 ? `${value.slice(0,4)}-${value.slice(4,6)}-${value.slice(6,8)}` : value;
@@ -661,7 +661,8 @@
         ],
         lines: [
           { key: "pe", name: "PE", unit: "x" },
-          { key: "pb", name: "PB", unit: "x" }
+          { key: "pb", name: "PB", unit: "x" },
+          { key: "pePercentileSeries", name: "PE历史分位", unit: "%", percentile: true }
         ]
       },
       {
@@ -779,6 +780,12 @@
           updateModules();
         });
         const line = config.lines.find(line => line.key === config.activeKey);
+        if (config.id === 1) {
+          document.getElementById("valuationChartTitle").textContent = line.percentile ? "PE历史分位走势" : "估值走势";
+          document.getElementById("valuationChartDesc").textContent = line.percentile
+            ? "各时点 PE 在所选区间全部有效日度 PE 中的位置（0–100%），最新分位与上方卡片一致。"
+            : "展示所选行业指数的真实估值，可切换 PE、PB 与 PE历史分位，并对比多个指数。";
+        }
         const series = picks.map(pick => {
           const period = periodData(pick.name, state.years);
           return {
@@ -791,6 +798,7 @@
         ).join("");
         moduleCharts[index].kind = line.unit === "x" ? "pe" : "module";
         moduleCharts[index].unit = line.unit;
+        moduleCharts[index].percentile = Boolean(line.percentile);
         moduleCharts[index].setData(series, [], picks.length ? "所选区间暂无足够真实数据" : "请选择行业指数");
       });
     }
@@ -894,6 +902,7 @@
         let lo = Math.min(...vals), hi = Math.max(...vals);
         const margin = (hi-lo || 1) * .12; lo -= margin; hi += margin;
         if (["亿", "亿股", "%"].includes(this.unit)) lo = Math.max(0, lo);
+        if (this.percentile) { lo = 0; hi = 100; }
         this.geom = {W,H,pad,lo,hi};
         x.font = "10px Microsoft YaHei"; x.fillStyle = "#89949b"; x.strokeStyle = "#e7ebee"; x.lineWidth = 1;
         x.textAlign = "left";
@@ -901,7 +910,7 @@
           const y = pad.t + (H-pad.t-pad.b)*i/4;
           x.beginPath(); x.moveTo(pad.l,y); x.lineTo(W-pad.r,y); x.stroke();
           const value = hi-(hi-lo)*i/4;
-          x.fillText(this.kind === "pe" ? value.toFixed(1)+"x" : value.toFixed(this.unit === "%" ? 1 : 0), 5, y+3);
+          x.fillText(this.percentile ? value.toFixed(0)+"%" : this.kind === "pe" ? value.toFixed(1)+"x" : value.toFixed(this.unit === "%" ? 1 : 0), 5, y+3);
         }
         const tickCount = Math.min(5, Math.max(2, Math.floor((W-pad.l-pad.r)/100)+1));
         x.textAlign = "center";

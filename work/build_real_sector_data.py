@@ -4,6 +4,7 @@ import re
 import ssl
 import time
 import urllib.request
+from bisect import bisect_right
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -193,6 +194,18 @@ def valuation_percentile(rows, key, latest):
     return round(sum(value <= current for value in values) / len(values) * 100)
 
 
+def valuation_percentile_series(rows, key, sample):
+    """Rank each observation against all valid daily values in this interval."""
+    values = sorted(value for row in rows
+                    if (value := observation_value(row, key)) is not None and value > 0)
+    result = []
+    for row in sample:
+        current = observation_value(row, key)
+        result.append(round(bisect_right(values, current) / len(values) * 100)
+                      if values and current is not None and current > 0 else None)
+    return result
+
+
 def build_history(rows):
     rows = [row for row in rows if row.get("trade_date")]
     rows.sort(key=lambda row: row["trade_date"])
@@ -226,6 +239,7 @@ def build_history(rows):
             "price": normalize_series(sample, "close"),
             "profit": normalize_series(sample, "profit"),
             "pe": normalize_series(sample, "pe"),
+            "pePercentileSeries": valuation_percentile_series(full_period, "pe", sample),
             "pb": normalize_series(sample, "pb"),
             "amountYi": normalize_series(sample, "amountYi"),
             "volumeYi": normalize_series(sample, "volumeYi"),
