@@ -11,7 +11,7 @@ await cp(source, target, { recursive: true });
 await mkdir(resolve(target, ".openai"), { recursive: true });
 await cp(resolve(root, ".openai", "hosting.json"), resolve(target, ".openai", "hosting.json"));
 
-const files = ["index.html", "sector_real_data.js", "sector_real_data.json", "market_modules_data.js", "market_modules_data.json"];
+const files = ["index.html", "sector_real_data.js", "sector_real_data.json", "market_modules_data.js", "market_modules_data.json", "company_details_data.js", "company_details_data.json"];
 const assets = {};
 for (const file of files) {
   assets[`/${file}`] = await readFile(resolve(source, file), "utf8");
