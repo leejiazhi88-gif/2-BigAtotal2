@@ -465,6 +465,28 @@
     .tip strong { display: block; margin-bottom: 2px; }
     .tip-row { display: flex; justify-content: space-between; gap: 18px; }
 
+    .company-section { margin-top: 12px; padding: 18px 20px; }
+    .company-section > h2 { margin: 0 0 6px; font-size: 16px; }
+    .company-intro, .company-summary, .company-note { color: var(--muted); font-size: 12px; line-height: 1.6; }
+    .company-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0; padding: 10px; background: #f2f5f6; border: 1px solid var(--line); border-radius: 10px; }
+    .company-tabs[hidden] { display: none; }
+    .company-tab { display: inline-flex; align-items: center; gap: 12px; padding: 10px 14px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--muted); cursor: pointer; font: inherit; font-size: 12px; text-align: left; }
+    .company-tab.active { background: #fff; color: var(--ink); border-color: var(--line); box-shadow: 0 2px 5px rgba(25,43,54,.06); }
+    .company-tab-count { color: var(--muted); font-size: 11px; }
+    .company-tab-symbol { color: var(--red); font-size: 16px; }
+    .company-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; margin: 20px 0 10px; }
+    .company-head h3 { margin: 0; font-size: 15px; }
+    .company-search { width: min(100%, 260px); padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink); font: inherit; font-size: 12px; }
+    .company-table-wrap { max-height: 560px; overflow: auto; border: 1px solid var(--line); border-radius: 10px; margin-top: 12px; }
+    .company-table { width: 100%; min-width: 620px; border-collapse: separate; border-spacing: 0; font-size: 13px; }
+    .company-table th { position: sticky; top: 0; background: #edf2f3; color: var(--muted); font-weight: 600; z-index: 1; }
+    .company-table th, .company-table td { padding: 13px 16px; border-bottom: 1px solid #edf1f3; text-align: left; white-space: nowrap; }
+    .company-table tbody tr:last-child td { border-bottom: 0; }
+    .company-table tbody tr:hover { background: #f8fafb; }
+    .company-table .numeric { text-align: right; font-variant-numeric: tabular-nums; }
+    .company-table .empty { text-align: center; color: var(--muted); padding: 28px 16px; }
+    .company-note { margin-top: 10px; font-size: 11px; }
+
     .footnote {
       margin-top: 11px;
       color: #8c969d;
@@ -594,13 +616,36 @@
           </article>
 
         </section>
+        <section class="company-section panel" aria-labelledby="companySectionTitle">
+          <h2 id="companySectionTitle">公司明细</h2>
+          <div class="company-intro">点击已选行业标签，查看对应公司的名称和市值；再次点击可收起。</div>
+          <div class="company-tabs" id="companyTabs" aria-label="已选行业公司明细"></div>
+          <div class="company-summary" id="companyHint">请先从左侧选择行业指数。</div>
+          <div id="companyContent" hidden>
+            <div class="company-head">
+              <h3 id="companyTableTitle">公司明细</h3>
+              <input class="company-search" id="companySearch" type="search" placeholder="搜索公司名称或股票代码" aria-label="搜索公司名称或股票代码">
+            </div>
+            <div class="company-summary" id="companySummary" role="status" aria-live="polite"></div>
+            <div class="company-table-wrap" tabindex="0" role="region" aria-label="公司市值明细表，可横向滚动">
+              <table class="company-table">
+                <thead><tr><th scope="col">公司</th><th scope="col">股票代码</th><th scope="col" class="numeric">总市值（亿元）</th><th scope="col" class="numeric">流通市值（亿元）</th><th scope="col">市值日期</th></tr></thead>
+                <tbody id="companyRows"></tbody>
+              </table>
+            </div>
+            <div class="company-note">成分口径：当前申万 SW2021 行业归属；市值单位：亿元。停牌等情况下使用最近可用数据，日期逐行标注。</div>
+          </div>
+        </section>
         <div class="footnote">说明：本页行业分类、指数点位、区间涨跌、PE、市值排序均来自 Tushare 申万 SW2021 行情；滚动年利润为 total_mv / PE 的隐含 TTM 利润。估值与交易热度模块使用所选申万行业指数的 PE、PB、成交额（万元）、成交量（万股）与流通市值（万元）。成交额/流通市值按金额计算，用于观察交易活跃度。历史分位按所选区间内全部有效日度数据计算。若某指标暂未接入稳定口径，则显示暂无真实数据。</div>
       </main>
     </div>
   </div>
 
   <script src="sector_real_data.js?v=99bd6d7cd8f3"></script>
+  <script src="company_details_data.js?v=dd87b944e4c1"></script>
   <script>
+    const companyData = window.COMPANY_DETAILS_DATA || null;
+    const companyState = { activeCode: null, query: "" };
     const realData = window.SECTOR_REAL_DATA || null;
     const formatAsOf = value => value && value.length === 8 ? `${value.slice(0,4)}-${value.slice(4,6)}-${value.slice(6,8)}` : value;
     document.getElementById("dataAsOf").textContent = `申万行业：${formatAsOf(realData?.asOf) || "-"}`;
@@ -803,6 +848,88 @@
       });
     }
 
+    function companyCodes(pick) {
+      return companyData?.indices?.[realData?.codes?.[pick.name]] || [];
+    }
+
+    function renderCompanyTable() {
+      const pick = selectedKeys().find(pick => realData?.codes?.[pick.name] === companyState.activeCode);
+      const content = document.getElementById("companyContent");
+      const hint = document.getElementById("companyHint");
+      const body = document.getElementById("companyRows");
+      body.replaceChildren();
+      content.hidden = !pick;
+      hint.hidden = Boolean(pick);
+      if (!pick) return;
+      document.getElementById("companyTableTitle").textContent = `${selectionName(pick)} · 公司明细`;
+      const allCodes = companyCodes(pick);
+      const query = companyState.query.trim().toLocaleLowerCase();
+      const codes = allCodes.filter(code => {
+        const company = companyData?.companies?.[code];
+        return company && (!query || code.toLocaleLowerCase().includes(query) || company.name.toLocaleLowerCase().includes(query));
+      });
+      document.getElementById("companySummary").textContent = companyData
+        ? `市值截至 ${formatAsOf(companyData.asOf)} · 显示 ${codes.length} / ${allCodes.length} 家，按总市值从高到低排列`
+        : "公司数据暂未加载，请刷新页面。";
+      const fragment = document.createDocumentFragment();
+      const formatCap = value => Number.isFinite(value)
+        ? value.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "暂无数据";
+      for (const code of codes) {
+        const company = companyData.companies[code];
+        const row = document.createElement("tr");
+        row.dataset.code = code;
+        [company.name, code, formatCap(company.totalMvYi), formatCap(company.circMvYi), formatAsOf(company.date) || "—"].forEach((value, i) => {
+          const cell = document.createElement("td");
+          cell.textContent = value;
+          if (i === 2 || i === 3) cell.className = "numeric";
+          row.appendChild(cell);
+        });
+        fragment.appendChild(row);
+      }
+      if (!codes.length) {
+        const row = document.createElement("tr"), cell = document.createElement("td");
+        cell.colSpan = 5; cell.className = "empty";
+        cell.textContent = !companyData ? "公司数据暂未加载" : allCodes.length ? "未找到匹配的公司" : "该行业暂无可用的上市公司成分数据";
+        row.appendChild(cell); fragment.appendChild(row);
+      }
+      body.appendChild(fragment);
+    }
+
+    function renderCompanyDetails() {
+      const picks = selectedKeys();
+      if (!picks.some(pick => realData?.codes?.[pick.name] === companyState.activeCode)) {
+        companyState.activeCode = null;
+        companyState.query = "";
+      }
+      const tabs = document.getElementById("companyTabs");
+      tabs.replaceChildren();
+      for (const pick of picks) {
+        const code = realData?.codes?.[pick.name];
+        const active = code === companyState.activeCode;
+        const button = document.createElement("button");
+        button.type = "button"; button.className = `company-tab${active ? " active" : ""}`;
+        button.dataset.code = code;
+        button.setAttribute("aria-expanded", String(active));
+        button.setAttribute("aria-controls", "companyContent");
+        const label = document.createElement("span"); label.textContent = selectionName(pick);
+        const count = document.createElement("span"); count.className = "company-tab-count"; count.textContent = `${companyCodes(pick).length} 家`;
+        const symbol = document.createElement("span"); symbol.className = "company-tab-symbol"; symbol.textContent = active ? "−" : "+"; symbol.setAttribute("aria-hidden", "true");
+        button.append(label, count, symbol);
+        button.onclick = () => {
+          companyState.activeCode = active ? null : code;
+          companyState.query = "";
+          renderCompanyDetails();
+          [...tabs.children].find(item => item.dataset.code === code)?.focus({ preventScroll: true });
+        };
+        tabs.appendChild(button);
+      }
+      tabs.hidden = !picks.length;
+      document.getElementById("companyHint").textContent = picks.length
+        ? "点击上方行业标签查看公司明细。" : "请先从左侧选择行业指数。";
+      document.getElementById("companySearch").value = companyState.query;
+      renderCompanyTable();
+    }
+
     function renderFilters(query = "") {
       const root = document.getElementById("filterList");
       root.innerHTML = "";
@@ -963,6 +1090,7 @@
 
     function update() {
       const picks = selectedKeys();
+      renderCompanyDetails();
       const names = picks.map(s => s.level === 2 ? `${s.parent} · ${s.name}` : s.name);
       const visibleNames = names.slice(0, 4);
       document.getElementById("scopeText").textContent =
@@ -1049,6 +1177,10 @@
       state.years = btn.dataset.years === "all" ? "all" : +btn.dataset.years;
       update();
     });
+    document.getElementById("companySearch").oninput = e => {
+      companyState.query = e.target.value;
+      renderCompanyTable();
+    };
     document.getElementById("search").oninput = e => renderFilters(e.target.value);
     document.getElementById("selectAllBtn").onclick = () => {
       state.selections = isAllSelected()
