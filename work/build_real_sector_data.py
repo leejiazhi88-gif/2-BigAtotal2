@@ -6,6 +6,9 @@ import time
 import urllib.request
 from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
+
+from tushare_fetch import cached_call, date_chunks
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -91,7 +94,7 @@ def shift_years(date_text, years):
 
 
 def latest_sw_date(token):
-    today = datetime.now().strftime("%Y%m%d")
+    today = datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y%m%d")
     # Use a liquid SW level-1 index as the availability probe; SW index data can lag
     # the exchange calendar, so the latest open day is not always enough.
     rows = call_api(
@@ -253,12 +256,18 @@ def main():
     items = list(code_by_name.items())
     for idx, (name, code) in enumerate(items, 1):
         print(f"[{idx}/{len(items)}] {name} {code}", flush=True)
-        rows = call_api(
-            token,
-            "sw_daily",
-            {"ts_code": code, "start_date": START_DATE, "end_date": END_DATE},
-            fields,
-        )
+        by_date = {}
+        for start, end in date_chunks(START_DATE, END_DATE, years=10):
+            chunk = cached_call(call_api, token, "sw_daily",
+                                {"ts_code": code, "start_date": start, "end_date": end}, fields)
+            if len(chunk) >= 4000:
+                raise RuntimeError(f"SW response reached its row cap: {code}, {start}-{end}")
+            by_date.update({row["trade_date"]: row for row in chunk})
+        rows = list(by_date.values())
+        if rows and max(by_date) != END_DATE:
+            print(f"  Last published SW date for {name}: {max(by_date)}", flush=True)
+        if not rows:
+            print(f"  No published SW history for {name}; values remain unavailable.", flush=True)
         metrics[name] = build_history(rows)
         time.sleep(0.08)
 
@@ -275,11 +284,16 @@ def main():
         "source": "Tushare sw_daily / index_classify, SW2021",
         "asOf": END_DATE,
         "periodStarts": periods,
-        "generatedAt": datetime.now().isoformat(timespec="seconds"),
+        "generatedAt": datetime.now(ZoneInfo("Asia/Shanghai")).isoformat(timespec="seconds"),
         "industries": sorted_industries,
         "codes": code_by_name,
         "levels": level_by_name,
         "metrics": metrics,
+        "unavailableIndustries": [name for name, value in metrics.items() if not value["latest"]["date"]],
+        "historicalOnlyIndustries": {
+            name: value["latest"]["date"] for name, value in metrics.items()
+            if value["latest"]["date"] and value["latest"]["date"] != END_DATE
+        },
     }
     OUTPUT.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     OUTPUT_JS.write_text("window.SECTOR_REAL_DATA = " + json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + ";\n", encoding="utf-8")

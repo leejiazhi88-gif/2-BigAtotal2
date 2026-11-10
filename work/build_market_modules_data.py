@@ -4,8 +4,11 @@ import re
 import ssl
 import time
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
+
+from tushare_fetch import cached_call, date_chunks
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -94,7 +97,7 @@ def shift_years(date_text, years):
 
 
 def latest_daily_basic_date(token):
-    today = datetime.now().strftime("%Y%m%d")
+    today = datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y%m%d")
     rows = call_api(
         token,
         "trade_cal",
@@ -168,23 +171,21 @@ def sample_dates(token, end_date, period_starts):
 
 
 def row_metrics(token, date):
-    basic = call_api(
+    basic = cached_call(call_api,
         token,
         "daily_basic",
         {"trade_date": date},
         "ts_code,trade_date,pe_ttm,pb,circ_mv,turnover_rate_f",
     )
-    daily = call_api(token, "daily", {"trade_date": date}, "ts_code,trade_date,amount,pct_chg")
+    daily = cached_call(call_api, token, "daily", {"trade_date": date}, "ts_code,trade_date,amount,pct_chg")
+    if not basic or not daily or len(basic) >= 6000 or len(daily) >= 6000:
+        raise RuntimeError(f"Missing or truncated market data for {date}")
     margin_rows = []
     for exchange in ("SSE", "SZSE"):
-        try:
-            margin_rows += call_api(token, "margin", {"trade_date": date, "exchange_id": exchange}, "trade_date,exchange_id,rzye")
-        except Exception:
-            pass
-    try:
-        block_rows = call_api(token, "block_trade", {"trade_date": date}, "ts_code,trade_date,amount,vol")
-    except Exception:
-        block_rows = []
+        margin_rows += cached_call(call_api, token, "margin", {"trade_date": date, "exchange_id": exchange}, "trade_date,exchange_id,rzye")
+    block_rows = cached_call(call_api, token, "block_trade", {"trade_date": date}, "ts_code,trade_date,amount,vol")
+    if len(block_rows) >= 1000:
+        raise RuntimeError(f"Block trade response reached its row cap for {date}")
 
     pe_values = [row.get("pe_ttm") for row in basic]
     pb_values = [row.get("pb") for row in basic]
@@ -204,7 +205,7 @@ def row_metrics(token, date):
         "limitUpCount": sum(1 for value in pct_chg if value is not None and value >= 9.8),
         "marginBalance": round(margin_balance_yuan / 100000000, 2) if margin_balance_yuan else None,
         "marginCircRatio": round(margin_balance_yuan / (circ_mv * 10000) * 100, 2) if margin_balance_yuan and circ_mv else None,
-        "blockTradeAmount": round(block_amount / 10000, 2),  # Tushare block amount is 10k yuan; output is 100m yuan.
+        "blockTradeAmount": round(block_amount / 10000, 2) if block_rows else None,  # No published rows is not a reported zero.
     }
 
 
@@ -225,7 +226,12 @@ def labels(rows):
 
 
 def trailing_ipo(token, dates, period_starts, end_date):
-    all_rows = call_api(token, "new_share", {"start_date": period_starts["20"], "end_date": end_date}, "ts_code,name,ipo_date,amount,price")
+    all_rows = []
+    for start, end in date_chunks(shift_years(period_starts["20"], 1), end_date):
+        chunk = cached_call(call_api, token, "new_share", {"start_date": start, "end_date": end}, "ts_code,name,ipo_date,amount,price")
+        if len(chunk) >= 2000:
+            raise RuntimeError(f"IPO response reached its row cap for {start}-{end}")
+        all_rows.extend(chunk)
     ipo_by_date = {}
     for row in all_rows:
         date = row.get("ipo_date")
@@ -243,14 +249,21 @@ def trailing_ipo(token, dates, period_starts, end_date):
 
 
 def hsgt_series(token, dates, period_starts, end_date):
-    rows = call_api(token, "moneyflow_hsgt", {"start_date": period_starts["5"], "end_date": end_date}, "trade_date,north_money,south_money")
+    rows = []
+    for start, end in date_chunks(period_starts["5"], end_date):
+        chunk = cached_call(call_api, token, "moneyflow_hsgt", {"start_date": start, "end_date": end}, "trade_date,north_money,south_money")
+        if len(chunk) >= 300:
+            raise RuntimeError(f"HSGT response reached its row cap for {start}-{end}")
+        rows.extend(chunk)
     by_date = {row["trade_date"]: finite(row.get("north_money")) for row in rows}
     available = sorted(by_date)
     output = {}
+    source_dates = {}
     for date in dates:
         prior = [d for d in available if d <= date]
         output[date] = by_date[prior[-1]] if prior else None
-    return output
+        source_dates[date] = prior[-1] if prior else None
+    return output, source_dates
 
 
 def main():
@@ -265,11 +278,30 @@ def main():
         metrics_by_date[date] = row_metrics(token, date)
         time.sleep(0.05)
 
+    latest = metrics_by_date[end_date]
+    latest_dates = {key: end_date for key, value in latest.items() if key != "date" and value is not None}
+    # Financing and block trades publish later than the daily stock data.
+    # Keep their actual observation dates visible when using the latest release.
+    recent = call_api(token, "trade_cal", {
+        "exchange": "SSE", "start_date": (ymd(end_date) - timedelta(days=14)).strftime("%Y%m%d"),
+        "end_date": end_date, "is_open": "1"}, "cal_date")
+    for prior in sorted((row["cal_date"] for row in recent if row["cal_date"] < end_date), reverse=True):
+        if latest["marginBalance"] is not None and latest["blockTradeAmount"] is not None:
+            break
+        print(f"Checking delayed market releases: {prior}", flush=True)
+        candidate = row_metrics(token, prior)
+        for key in ("marginBalance", "marginCircRatio", "blockTradeAmount"):
+            if latest[key] is None and candidate[key] is not None:
+                latest[key] = candidate[key]
+                latest_dates[key] = prior
+
     ipo = trailing_ipo(token, dates, period_starts, end_date)
-    north = hsgt_series(token, dates, period_starts, end_date)
+    north, north_dates = hsgt_series(token, dates, period_starts, end_date)
     for date in dates:
         metrics_by_date[date]["ipoFinancing12m"] = ipo.get(date)
         metrics_by_date[date]["northMoney"] = north.get(date)
+    latest_dates["northMoney"] = north_dates.get(end_date)
+    latest_dates["ipoFinancing12m"] = end_date
 
     periods = {}
     for years, period_dates in by_period.items():
@@ -312,8 +344,9 @@ def main():
         "source": "Tushare daily_basic / daily / margin / moneyflow_hsgt / block_trade / new_share",
         "asOf": end_date,
         "periodStarts": period_starts,
-        "generatedAt": datetime.now().isoformat(timespec="seconds"),
+        "generatedAt": datetime.now(ZoneInfo("Asia/Shanghai")).isoformat(timespec="seconds"),
         "latest": latest,
+        "latestDates": latest_dates,
         "periods": periods,
     }
     OUTPUT_JSON.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")

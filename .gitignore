@@ -7,3 +7,5 @@ __pycache__/
 *.pyc
 .DS_Store
 Thumbs.db
+work/.tushare-cache/
+work/refresh_*.log
