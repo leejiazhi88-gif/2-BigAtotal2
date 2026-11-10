@@ -176,11 +176,34 @@ def implied_profit(row):
     return mv / pe
 
 
+def observation_value(row, key):
+    try:
+        value = float(row.get(key))
+        return value if math.isfinite(value) else None
+    except (TypeError, ValueError):
+        return None
+
+
+def valuation_percentile(rows, key, latest):
+    values = [observation_value(row, key) for row in rows]
+    values = [value for value in values if value is not None and value > 0]
+    current = observation_value(latest, key)
+    if current is None or current <= 0 or not values:
+        return None
+    return round(sum(value <= current for value in values) / len(values) * 100)
+
+
 def build_history(rows):
     rows = [row for row in rows if row.get("trade_date")]
     rows.sort(key=lambda row: row["trade_date"])
     for row in rows:
         row["profit"] = implied_profit(row)
+        amount = observation_value(row, "amount")
+        volume = observation_value(row, "vol")
+        float_mv = observation_value(row, "float_mv")
+        row["amountYi"] = amount / 10000 if amount is not None else None
+        row["volumeYi"] = volume / 10000 if volume is not None else None
+        row["amountFloatRatio"] = amount / float_mv * 100 if amount is not None and float_mv and float_mv > 0 else None
     latest = rows[-1] if rows else {}
     periods = {}
     max_points = {"1": 64, "3": 72, "5": 72, "10": 84, "20": 96, "all": 160}
@@ -193,15 +216,9 @@ def build_history(rows):
             continue
         close_values = [float(row["close"]) for row in sample]
         ret = (close_values[-1] / close_values[0] - 1) * 100
-        pe_values = [row.get("pe") for row in sample if row.get("pe") is not None]
-        latest_pe = latest.get("pe")
-        pe_percentile = None
-        if latest_pe is not None and pe_values:
-            ordered = sorted(float(v) for v in pe_values if float(v) > 0)
-            if ordered:
-                rank = sum(1 for value in ordered if value <= float(latest_pe))
-                pe_percentile = round(rank / len(ordered) * 100)
+        full_period = [row for row in rows if row["trade_date"] >= start]
         periods[years] = {
+            "dates": [row["trade_date"] for row in sample],
             "labels": [
                 ymd(row["trade_date"]).strftime("%Y-%m-%d" if years == "all" else "%Y-%m")
                 for row in sample
@@ -209,10 +226,15 @@ def build_history(rows):
             "price": normalize_series(sample, "close"),
             "profit": normalize_series(sample, "profit"),
             "pe": normalize_series(sample, "pe"),
+            "pb": normalize_series(sample, "pb"),
+            "amountYi": normalize_series(sample, "amountYi"),
+            "volumeYi": normalize_series(sample, "volumeYi"),
+            "amountFloatRatio": normalize_series(sample, "amountFloatRatio"),
             "return": round(ret, 2),
             "startDate": sample[0]["trade_date"],
             "endDate": sample[-1]["trade_date"],
-            "pePercentile": pe_percentile,
+            "pePercentile": valuation_percentile(full_period, "pe", latest),
+            "pbPercentile": valuation_percentile(full_period, "pb", latest),
         }
     return {
         "latest": {
@@ -221,6 +243,12 @@ def build_history(rows):
             "pe": round(float(latest["pe"]), 2) if latest.get("pe") is not None else None,
             "totalMv": round(float(latest["total_mv"]), 2) if latest.get("total_mv") is not None else None,
             "profit": round(implied_profit(latest), 2) if implied_profit(latest) else None,
+            **{key: round(observation_value(latest, field), 4)
+               if observation_value(latest, field) is not None else None
+               for key, field in {
+                   "pb": "pb", "amountYi": "amountYi", "volumeYi": "volumeYi",
+                   "amountFloatRatio": "amountFloatRatio", "pctChange": "pct_change",
+               }.items()},
         },
         "periods": periods,
     }
@@ -258,7 +286,7 @@ def main():
         level_by_name[name] = 2
 
     metrics = {}
-    fields = "ts_code,trade_date,name,close,pe,total_mv"
+    fields = "ts_code,trade_date,name,close,pe,pb,total_mv,float_mv,amount,vol,pct_change"
     items = list(code_by_name.items())
     for idx, (name, code) in enumerate(items, 1):
         print(f"[{idx}/{len(items)}] {name} {code}", flush=True)
