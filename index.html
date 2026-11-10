@@ -329,7 +329,7 @@
 
     .modules {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: minmax(0, 1fr);
       gap: 12px;
       margin-top: 12px;
     }
@@ -401,6 +401,16 @@
       font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
       font-size: 10px;
     }
+
+    .module-scope { margin-bottom: 12px; color: var(--muted); font-size: 12px; }
+    .module-controls { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+    .module-measure { padding: 6px 12px; border: 1px solid var(--line); border-radius: 7px; background: #f4f6f7; color: var(--muted); cursor: pointer; }
+    .module-measure.active { background: var(--red-soft); color: var(--red); border-color: #edcbc7; }
+    .module-kpi .metric-row { flex-wrap: wrap; }
+    .module-kpi .metric-name { min-width: 0; white-space: normal; }
+    .module-kpi .metric-number { font-size: 16px; }
+    .module-card .chart-top { flex-wrap: wrap; }
+    .module-card .legend-item { white-space: nowrap; }
 
     .module-chart {
       height: 170px;
@@ -552,12 +562,14 @@
               <div class="module-index">1</div>
               <div>
                 <div class="module-title">估值</div>
-                <div class="module-desc">全市场 PE 中位数、PB 中位数、高估值股票占比，以及估值所处历史位置。</div>
+                <div class="module-desc">所选行业指数的 PE、PB 及其在当前时间范围内的历史分位。</div>
               </div>
             </div>
+            <div class="module-scope" id="moduleScope1"></div>
             <div class="module-kpis" id="moduleKpi1"></div>
+            <div class="module-controls" id="moduleControls1" aria-label="估值指标"></div>
             <div class="chart-top">
-              <div><div class="chart-title">估值走势</div><div class="chart-desc">真实 A 股日度基础指标按采样交易日聚合，走势按区间起点=100归一</div></div>
+              <div><div class="chart-title">估值走势</div><div class="chart-desc">展示所选行业指数的真实估值，可切换 PE 与 PB，并对比多个指数。</div></div>
               <div class="legend" id="legend-module1"></div>
             </div>
             <div class="chart-wrap module-chart"><canvas id="moduleChart1"></canvas><div class="tip"></div></div>
@@ -568,30 +580,30 @@
               <div class="module-index">2</div>
               <div>
                 <div class="module-title">情绪·散户</div>
-                <div class="module-desc">两市成交额、换手率、融资余额、融资余额/流通市值、涨停数量等交易热度指标。</div>
+                <div class="module-desc">所选行业指数的成交额、成交量、成交额/流通市值及单日涨跌幅。</div>
               </div>
             </div>
+            <div class="module-scope" id="moduleScope2"></div>
             <div class="module-kpis" id="moduleKpi2"></div>
+            <div class="module-controls" id="moduleControls2" aria-label="交易热度指标"></div>
             <div class="chart-top">
-              <div><div class="chart-title">交易热度走势</div><div class="chart-desc">成交额、换手率和融资余额来自真实交易与两融数据，走势按区间起点=100归一</div></div>
+              <div><div class="chart-title">交易热度走势</div><div class="chart-desc">展示所选行业指数的真实交易活跃度，可切换成交额、成交量与成交额/流通市值。</div></div>
               <div class="legend" id="legend-module2"></div>
             </div>
             <div class="chart-wrap module-chart"><canvas id="moduleChart2"></canvas><div class="tip"></div></div>
           </article>
 
         </section>
-        <div class="footnote">说明：本页行业分类、指数点位、区间涨跌、PE、市值排序均来自 Tushare 申万 SW2021 行情；滚动年利润为 total_mv / PE 的隐含 TTM 利润。估值与交易热度模块来自 Tushare daily_basic / daily / margin。若某指标暂未接入稳定口径，则显示暂无真实数据。</div>
+        <div class="footnote">说明：本页行业分类、指数点位、区间涨跌、PE、市值排序均来自 Tushare 申万 SW2021 行情；滚动年利润为 total_mv / PE 的隐含 TTM 利润。估值与交易热度模块使用所选申万行业指数的 PE、PB、成交额（万元）、成交量（万股）与流通市值（万元）。成交额/流通市值按金额计算，用于观察交易活跃度。历史分位按所选区间内全部有效日度数据计算。若某指标暂未接入稳定口径，则显示暂无真实数据。</div>
       </main>
     </div>
   </div>
 
-  <script src="sector_real_data.js?v=20261110-20261110184412"></script>
-  <script src="market_modules_data.js?v=20261110-20261110184309"></script>
+  <script src="sector_real_data.js?v=20261110-20261110190417"></script>
   <script>
     const realData = window.SECTOR_REAL_DATA || null;
-    const marketData = window.MARKET_MODULES_DATA || null;
     const formatAsOf = value => value && value.length === 8 ? `${value.slice(0,4)}-${value.slice(4,6)}-${value.slice(6,8)}` : value;
-    document.getElementById("dataAsOf").textContent = `申万/市场：${formatAsOf(realData?.asOf) || "-"} / ${formatAsOf(marketData?.asOf) || "-"}`;
+    document.getElementById("dataAsOf").textContent = `申万行业：${formatAsOf(realData?.asOf) || "-"}`;
     let industries = realData?.industries || {
       "农林牧渔": ["养殖业","饲料","种植业","渔业","动物保健","农产品加工"],
       "基础化工": ["化学原料","化学制品","农化制品","塑料","橡胶","化学纤维"],
@@ -640,33 +652,32 @@
     const moduleCharts = [];
     const moduleConfigs = [
       {
-        id: 1,
+        id: 1, activeKey: "pe",
         metrics: [
-          { key: "peMedian", label: "全市场 PE 中位数", format: "x" },
-          { key: "pbMedian", label: "全市场 PB 中位数", format: "x" },
-          { key: "highPeRatio", label: "高估值股票占比", format: "pct" },
-          { key: "peMedian", label: "PE 历史分位", format: "rank" }
+          { key: "pe", label: "指数 PE", format: "x" },
+          { key: "pb", label: "指数 PB", format: "x" },
+          { key: "pePercentile", label: "PE 历史分位", format: "rank" },
+          { key: "pbPercentile", label: "PB 历史分位", format: "rank" }
         ],
         lines: [
-          { key: "peMedian", name: "PE中位数" },
-          { key: "pbMedian", name: "PB中位数" },
-          { key: "highPeRatio", name: "高PE占比" }
+          { key: "pe", name: "PE", unit: "x" },
+          { key: "pb", name: "PB", unit: "x" }
         ]
       },
       {
-        id: 2,
+        id: 2, activeKey: "amountYi",
         metrics: [
-          { key: "amountTotal", label: "两市成交额", format: "yi" },
-          { key: "turnoverMedian", label: "换手率中位数", format: "pct" },
-          { key: "marginBalance", label: "融资余额", format: "yi" },
-          { key: "limitUpCount", label: "涨停数量", format: "count" }
+          { key: "amountYi", label: "成交额", format: "yi" },
+          { key: "volumeYi", label: "成交量", format: "shares" },
+          { key: "amountFloatRatio", label: "成交额 / 流通市值", format: "pct" },
+          { key: "pctChange", label: "单日涨跌幅", format: "pct" }
         ],
         lines: [
-          { key: "amountTotal", name: "成交额" },
-          { key: "marginBalance", name: "融资余额" },
-          { key: "limitUpCount", name: "涨停数" }
+          { key: "amountYi", name: "成交额", unit: "亿" },
+          { key: "volumeYi", name: "成交量", unit: "亿股" },
+          { key: "amountFloatRatio", name: "成交额 / 流通市值", unit: "%" }
         ]
-      },
+      }
     ];
 
     function periodData(name, years) {
@@ -725,56 +736,62 @@
       return `${(value / 1e4).toFixed(1)}亿`;
     }
 
-    function formatModuleValue(value, format, key) {
-      if (format === "missing") return "暂无真实数据";
-      if (format === "rank") {
-        const rank = marketData?.periods?.[String(state.years)]?.percentiles?.[key];
-        return rank === null || rank === undefined ? "暂无真实数据" : `${rank}%`;
-      }
-      if (value === null || value === undefined || !Number.isFinite(Number(value))) return "暂无真实数据";
-      const number = Number(value);
-      if (format === "x") return `${number.toFixed(2)}x`;
-      if (format === "pct") return `${number.toFixed(2)}%`;
-      if (format === "yi") return `${number.toLocaleString("zh-CN", { maximumFractionDigits: 1 })}亿`;
-      if (format === "count") return `${Math.round(number)}个`;
-      return number.toLocaleString("zh-CN", { maximumFractionDigits: 2 });
+    function formatModuleValue(value, format) {
+      if (!Number.isFinite(value)) return "暂无真实数据";
+      if (format === "x") return `${value.toFixed(2)}x`;
+      if (format === "pct" || format === "rank") return `${value.toFixed(format === "rank" ? 0 : 2)}%`;
+      if (format === "yi") return `${value.toLocaleString("zh-CN", { maximumFractionDigits: 2 })}亿`;
+      if (format === "shares") return `${value.toLocaleString("zh-CN", { maximumFractionDigits: 2 })}亿股`;
+      return value.toLocaleString("zh-CN", { maximumFractionDigits: 2 });
     }
 
-    function renderModuleKpis(config) {
-      const latest = marketData?.latest || {};
+    function selectionName(pick) {
+      return pick.level === 2 ? `${pick.parent} · ${pick.name}` : pick.name;
+    }
+
+    function renderModuleKpis(config, picks) {
       const box = document.getElementById(`moduleKpi${config.id}`);
       box.innerHTML = config.metrics.map(metric => {
-        const value = formatModuleValue(latest[metric.key], metric.format, metric.key);
-        const sourceDate = marketData?.latestDates?.[metric.key];
         const note = metric.format === "rank"
-          ? `<span class="module-kpi-note">${state.years === "all" ? "全部历史" : `近${state.years}年`}</span>`
-          : sourceDate && sourceDate !== marketData?.asOf
-            ? `<span class="module-kpi-note">截至 ${formatAsOf(sourceDate)}</span>`
-            : "";
-        return `<div class="module-kpi"><div class="module-kpi-label">${metric.label}</div><div class="module-kpi-value">${value}${note}</div></div>`;
+          ? `<span class="module-kpi-note">${state.years === "all" ? "全部历史" : `近${state.years}年`}</span>` : "";
+        const rows = picks.map((pick, index) => {
+          const latest = latestData(pick.name);
+          const value = metric.format === "rank"
+            ? periodData(pick.name, state.years)?.[metric.key] : latest[metric.key];
+          const date = latest.date && latest.date !== realData?.asOf ? `（截至 ${formatAsOf(latest.date)}）` : "";
+          return `<div class="metric-row"><span class="metric-name" style="color:${seriesColor(index)}">${selectionName(pick)}${date}</span><span class="metric-number">${formatModuleValue(value, metric.format)}</span></div>`;
+        }).join("");
+        return `<div class="module-kpi"><div class="module-kpi-label">${metric.label}${note}</div><div class="module-kpi-value metric-list">${picks.length ? rows : '<div class="metric-empty">请选择行业指数</div>'}</div></div>`;
       }).join("");
     }
 
-    function normalizeTo100(values) {
-      const raw = values || [];
-      const base = raw.find(value => Number.isFinite(value) && value !== 0);
-      if (base === undefined) return raw.map(() => null);
-      return raw.map(value => Number.isFinite(value) ? Number((value / base * 100).toFixed(2)) : null);
-    }
-
     function updateModules() {
-      const period = marketData?.periods?.[String(state.years)];
+      const picks = selectedKeys();
       moduleConfigs.forEach((config, index) => {
-        renderModuleKpis(config);
-        const legend = document.getElementById(`legend-module${config.id}`);
-        const series = config.lines.map(line => ({
-          name: line.name,
-          values: normalizeTo100(period?.series?.[line.key] || [])
-        }));
-        legend.innerHTML = config.lines.map((line, i) =>
-          `<span class="legend-item" style="--legend:${seriesColor(i)}">${line.name}</span>`
+        renderModuleKpis(config, picks);
+        document.getElementById(`moduleScope${config.id}`).textContent = picks.length
+          ? `当前：${picks.slice(0, 4).map(selectionName).join("、")}${picks.length > 4 ? ` 等 ${picks.length} 项` : ""}`
+          : "当前：未选择行业指数";
+        const controls = document.getElementById(`moduleControls${config.id}`);
+        controls.innerHTML = config.lines.map(line => `<button class="module-measure${line.key === config.activeKey ? " active" : ""}" data-key="${line.key}" aria-pressed="${line.key === config.activeKey}">${line.name}</button>`).join("");
+        controls.querySelectorAll("button").forEach(button => button.onclick = () => {
+          config.activeKey = button.dataset.key;
+          updateModules();
+        });
+        const line = config.lines.find(line => line.key === config.activeKey);
+        const series = picks.map(pick => {
+          const period = periodData(pick.name, state.years);
+          return {
+            name: selectionName(pick), values: period?.[line.key] || [],
+            labels: (period?.dates || []).map(formatAsOf)
+          };
+        });
+        document.getElementById(`legend-module${config.id}`).innerHTML = picks.map((pick, i) =>
+          `<span class="legend-item" style="--legend:${seriesColor(i)}">${selectionName(pick)} · ${line.name}</span>`
         ).join("");
-        moduleCharts[index].setData(series, period?.labels || []);
+        moduleCharts[index].kind = line.unit === "x" ? "pe" : "module";
+        moduleCharts[index].unit = line.unit;
+        moduleCharts[index].setData(series, [], picks.length ? "所选区间暂无足够真实数据" : "请选择行业指数");
       });
     }
 
@@ -840,7 +857,7 @@
       }
 
       setData(series, labels, emptyMessage = "暂无足够真实数据") {
-        if (state.years === "all" && series.some(s => s.labels?.length)) {
+        if (series.some(s => s.labels?.some(label => label.length === 10))) {
           labels = [...new Set(series.flatMap(s => s.labels || []))].sort();
           series = series.map(s => {
             const byDate = new Map((s.labels || []).map((date, i) => [date, s.values[i]]));
@@ -851,7 +868,8 @@
         this.labels = labels;
         const dates = labels.map(label => Date.parse(label.length === 7 ? label + "-01" : label));
         const span = dates.at(-1) - dates[0];
-        this.positions = labels.map((_, i) => state.years === "all" && span > 0
+        const calendarScale = state.years === "all" || labels.some(label => label.length === 10);
+        this.positions = labels.map((_, i) => calendarScale && span > 0
           ? (dates[i] - dates[0]) / span
           : i / Math.max(1, labels.length - 1));
         this.emptyMessage = emptyMessage;
@@ -875,6 +893,7 @@
         if (!vals.length) return;
         let lo = Math.min(...vals), hi = Math.max(...vals);
         const margin = (hi-lo || 1) * .12; lo -= margin; hi += margin;
+        if (["亿", "亿股", "%"].includes(this.unit)) lo = Math.max(0, lo);
         this.geom = {W,H,pad,lo,hi};
         x.font = "10px Microsoft YaHei"; x.fillStyle = "#89949b"; x.strokeStyle = "#e7ebee"; x.lineWidth = 1;
         x.textAlign = "left";
@@ -882,14 +901,14 @@
           const y = pad.t + (H-pad.t-pad.b)*i/4;
           x.beginPath(); x.moveTo(pad.l,y); x.lineTo(W-pad.r,y); x.stroke();
           const value = hi-(hi-lo)*i/4;
-          x.fillText(this.kind === "pe" ? value.toFixed(1)+"x" : value.toFixed(0), 5, y+3);
+          x.fillText(this.kind === "pe" ? value.toFixed(1)+"x" : value.toFixed(this.unit === "%" ? 1 : 0), 5, y+3);
         }
-        const tickCount = 5;
+        const tickCount = Math.min(5, Math.max(2, Math.floor((W-pad.l-pad.r)/100)+1));
         x.textAlign = "center";
         for (let i=0;i<tickCount;i++) {
           const idx = Math.round((this.labels.length-1)*i/(tickCount-1));
           const xx = pad.l+(W-pad.l-pad.r)*this.positions[idx];
-          const label = this.labels[idx] || "";
+          const label = (this.labels[idx] || "").slice(0, W < 500 ? 7 : 10);
           x.textAlign = i === 0 ? "left" : (i === tickCount - 1 ? "right" : "center");
           x.fillText(label, i === 0 ? pad.l : (i === tickCount - 1 ? W - 6 : xx), H-12);
         }
@@ -923,7 +942,7 @@
           Math.abs(position-fraction) < Math.abs(this.positions[best]-fraction) ? i : best, 0);
         this.tip.innerHTML = `<strong>${this.labels[idx]}</strong>` + this.data.map((s,i) => {
           const value = s.values[idx];
-          const text = Number.isFinite(value) ? `${value.toFixed(2)}${this.kind==="pe"?"x":""}` : "--";
+          const text = Number.isFinite(value) ? `${value.toFixed(2)}${this.unit || (this.kind==="pe"?"x":"")}` : "--";
           return `<div class="tip-row"><span style="color:${seriesColor(i)}">${s.name}</span><b>${text}</b></div>`;
         }).join("");
         this.tip.style.display = "block";
