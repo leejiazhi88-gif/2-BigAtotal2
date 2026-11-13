@@ -9,13 +9,13 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 
-def cached_call(call, token, api, params, fields):
+def cached_call(call, token, api, params, fields, *, force=False):
     day = datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y%m%d")
     cache = Path(__file__).parent / ".tushare-cache" / day
     request = json.dumps([api, params, fields], sort_keys=True)
     target = cache / (hashlib.sha256(request.encode()).hexdigest() + ".json")
     mutable = str(params.get("trade_date") or params.get("end_date") or "") >= day
-    if target.is_file() and not mutable:
+    if target.is_file() and not mutable and not force:
         return json.loads(target.read_text(encoding="utf-8"))
     for attempt in range(3):
         try:

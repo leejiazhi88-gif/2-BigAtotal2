@@ -85,13 +85,18 @@ def main():
         "missingMarketCaps": [code for code, row in companies.items() if row["totalMvYi"] is None],
     }
     text = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
-    (ROOT / "outputs/company_details_data.json").write_text(text)
-    (ROOT / "outputs/company_details_data.js").write_text("window.COMPANY_DETAILS_DATA = " + text + ";\n")
-    page = ROOT / "outputs/index.html"
-    html = page.read_text()
-    html = re.sub(r"(company_details_data\.js\?v=)[^\"\s]+",
-                  lambda m: m[1] + hashlib.sha256(text.encode()).hexdigest()[:12], html)
-    page.write_text(html)
+    output = ROOT / "outputs/company_details_data.json"
+    previous = json.loads(output.read_text()) if output.exists() else None
+    if previous and {k: v for k, v in payload.items() if k != "generatedAt"} == {k: v for k, v in previous.items() if k != "generatedAt"}:
+        print("Company data unchanged; preserving published files and cache versions.", flush=True)
+    else:
+        output.write_text(text)
+        (ROOT / "outputs/company_details_data.js").write_text("window.COMPANY_DETAILS_DATA = " + text + ";\n")
+        page = ROOT / "outputs/index.html"
+        html = page.read_text()
+        html = re.sub(r"(company_details_data\.js\?v=)[^\"\s]+",
+                      lambda m: m[1] + hashlib.sha256(text.encode()).hexdigest()[:12], html)
+        page.write_text(html)
     print(json.dumps({"companies": len(companies), "indices": len(indices),
                       "missingCaps": len(payload["missingMarketCaps"]), "asOf": date}), flush=True)
 

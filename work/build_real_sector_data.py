@@ -12,6 +12,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from tushare_fetch import cached_call, date_chunks
+from sector_history import FIELDS, START_DATE, load_history, save_history, update_dates, update_history, validate_chunk
 from weekly_sampling import sample_dates, weekly_dates
 
 
@@ -19,7 +20,6 @@ ROOT = Path(__file__).resolve().parents[1]
 CONFIG = Path.home() / ".codex" / "config.toml"
 OUTPUT = ROOT / "outputs" / "sector_real_data.json"
 OUTPUT_JS = ROOT / "outputs" / "sector_real_data.js"
-START_DATE = "20060101"
 PERIOD_YEARS = ("1", "3", "5", "10", "20")
 
 
@@ -185,7 +185,7 @@ def valuation_percentile_series(rows, key, sample):
     return result
 
 
-def build_history(rows, open_dates, end_date):
+def build_history(rows, open_dates, end_date, period_dates=None):
     rows = [row for row in rows if row.get("trade_date")]
     rows.sort(key=lambda row: row["trade_date"])
     for row in rows:
@@ -200,7 +200,7 @@ def build_history(rows, open_dates, end_date):
     periods = {}
     for years in (*PERIOD_YEARS, "all"):
         start = START_DATE if years == "all" else shift_years(end_date, int(years))
-        dates = weekly_dates(open_dates, start, end_date)
+        dates = period_dates[years] if period_dates is not None else weekly_dates(open_dates, start, end_date)
         sample = sample_dates(rows, dates)
         valid_rows = [row for row in sample if row.get("close")]
         # Retain the existing full-history requirement for numbered time ranges.
@@ -248,23 +248,44 @@ def build_history(rows, open_dates, end_date):
 
 
 def main():
+    started = time.perf_counter()
     parser = argparse.ArgumentParser(description="Build sector data with common weekly observations and daily valuation ranks.")
-    parser.add_argument("--reuse-snapshot", action="store_true", help="Resample the existing published snapshot without advancing its as-of date.")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--reuse-snapshot", action="store_true", help="Resample the existing published snapshot without advancing its as-of date.")
+    mode.add_argument("--full-refresh", action="store_true", help="Refetch all daily history, including older revisions.")
     args = parser.parse_args()
     token = get_token()
-    previous = json.loads(OUTPUT.read_text()) if args.reuse_snapshot else None
-    end_date = previous["asOf"] if previous else latest_sw_date(token)
-    calendar_rows = cached_call(call_api, token, "trade_cal", {
-        "exchange": "SSE", "start_date": START_DATE, "end_date": end_date, "is_open": "1",
-    }, "cal_date,is_open")
-    open_dates = sorted(row["cal_date"] for row in calendar_rows if str(row["is_open"]) == "1")
+    previous = json.loads(OUTPUT.read_text()) if OUTPUT.exists() else None
+    if args.reuse_snapshot and previous is None:
+        raise RuntimeError("No published snapshot to reuse")
+    history = None
+    if previous and not args.full_refresh:
+        try:
+            history = load_history(ROOT, previous)
+        except FileNotFoundError:
+            if args.reuse_snapshot:
+                raise
+            print("Local daily history is missing; initializing the full history once.", flush=True)
+    end_date = previous["asOf"] if args.reuse_snapshot else latest_sw_date(token)
+    if previous and end_date < previous["asOf"]:
+        raise RuntimeError("Latest SW probe predates the published snapshot; refusing to roll back")
+    if args.reuse_snapshot and history.get("openDates"):
+        open_dates = history["openDates"]
+    else:
+        calendar_rows = cached_call(call_api, token, "trade_cal", {
+            "exchange": "SSE", "start_date": START_DATE, "end_date": end_date, "is_open": "1",
+        }, "cal_date,is_open")
+        open_dates = sorted(row["cal_date"] for row in calendar_rows if str(row["is_open"]) == "1")
     if not open_dates:
         raise RuntimeError("No trading dates in the requested calendar")
     periods = {years: shift_years(end_date, int(years)) for years in PERIOD_YEARS}
     periods["all"] = START_DATE
+    period_dates = {years: weekly_dates(open_dates, start, end_date) for years, start in periods.items()}
     print(f"SW data as of {end_date}; common weekly observations", flush=True)
-    l1_rows = [] if previous else call_api(token, "index_classify", {"src": "SW2021", "level": "L1"}, "index_code,industry_name,parent_code,level,industry_code")
-    l2_rows = [] if previous else call_api(token, "index_classify", {"src": "SW2021", "level": "L2"}, "index_code,industry_name,parent_code,level")
+    l1_rows = [] if args.reuse_snapshot else call_api(token, "index_classify", {"src": "SW2021", "level": "L1"}, "index_code,industry_name,parent_code,level,industry_code")
+    l2_rows = [] if args.reuse_snapshot else call_api(token, "index_classify", {"src": "SW2021", "level": "L2"}, "index_code,industry_name,parent_code,level")
+    if not args.reuse_snapshot and (not l1_rows or not l2_rows):
+        raise RuntimeError("Missing SW industry classification")
 
     l1_by_code = {row["industry_code"]: clean_name(row["industry_name"]) for row in l1_rows}
     children = {name: [] for name in l1_by_code.values()}
@@ -287,36 +308,45 @@ def main():
         code_by_name[name] = row["index_code"]
         level_by_name[name] = 2
 
-    if previous:
+    if args.reuse_snapshot:
         children, code_by_name, level_by_name = previous["industries"], previous["codes"], previous["levels"]
 
+    rows_by_code = history["rowsByCode"] if history else {}
+    rows_by_code = {code: rows_by_code[code] for code in code_by_name.values() if code in rows_by_code}
+    full_requests = 0
+    for code in code_by_name.values():
+        if code in rows_by_code:
+            continue
+        by_date = {}
+        for start, end in date_chunks(START_DATE, end_date, years=10):
+            chunk = cached_call(call_api, token, "sw_daily", {
+                "ts_code": code, "start_date": start, "end_date": end,
+            }, FIELDS, force=args.full_refresh)
+            validate_chunk(chunk, code, start, end)
+            by_date.update({row["trade_date"]: row for row in chunk})
+            full_requests += 1
+        rows_by_code[code] = [by_date[day] for day in sorted(by_date)]
+        print(f"Initialized daily history: {code}", flush=True)
+        time.sleep(0.08)
+    daily_dates = []
+    if history and not args.reuse_snapshot:
+        daily_dates = update_dates(open_dates, previous["asOf"])
+        print(f"Incremental refresh: {len(daily_dates)} daily requests for all {len(code_by_name)} indices: {daily_dates}", flush=True)
+        required = {code for name, code in code_by_name.items() if level_by_name[name] == 1}
+        rows_by_code = update_history(rows_by_code, daily_dates, lambda day: cached_call(
+            call_api, token, "sw_daily", {"trade_date": day}, FIELDS, force=True,
+        ), required)
+    raw_snapshot = save_history(ROOT, end_date, open_dates, rows_by_code)
     metrics = {}
-    fields = "ts_code,trade_date,name,close,pe,pb,total_mv,float_mv,amount,vol,pct_change"
     items = list(code_by_name.items())
     for idx, (name, code) in enumerate(items, 1):
         print(f"[{idx}/{len(items)}] {name} {code}", flush=True)
-        by_date = {}
-        for start, end in date_chunks(START_DATE, end_date, years=10):
-            params = {"ts_code": code, "start_date": start, "end_date": end}
-            if previous:
-                request = json.dumps(["sw_daily", params, fields], sort_keys=True)
-                key = hashlib.sha256(request.encode()).hexdigest() + ".json"
-                cache_day = previous.get("sourceSnapshotDate", previous["generatedAt"][:10].replace("-", ""))
-                path = ROOT / "work" / ".tushare-cache" / cache_day / key
-                chunk = json.loads(path.read_text(encoding="utf-8"))
-            else:
-                chunk = cached_call(call_api, token, "sw_daily", params, fields)
-            if len(chunk) >= 4000:
-                raise RuntimeError(f"SW response reached its row cap: {code}, {start}-{end}")
-            by_date.update({row["trade_date"]: row for row in chunk})
-        rows = list(by_date.values())
-        if rows and max(by_date) != end_date:
-            print(f"  Last published SW date for {name}: {max(by_date)}", flush=True)
+        rows = rows_by_code[code]
+        if rows and rows[-1]["trade_date"] != end_date:
+            print(f"  Last published SW date for {name}: {rows[-1]['trade_date']}", flush=True)
         if not rows:
             print(f"  No published SW history for {name}; values remain unavailable.", flush=True)
-        metrics[name] = build_history(rows, open_dates, end_date)
-        if not previous:
-            time.sleep(0.08)
+        metrics[name] = build_history(rows, open_dates, end_date, period_dates)
 
     # Sort using latest total market value, descending.
     sorted_industries = {}
@@ -333,10 +363,11 @@ def main():
         "chartAsOf": end_date,
         "sampling": {
             "frequency": "week", "rule": "每周最后一个交易日，当前周取快照最新交易日；各指数使用共同日期，缺失留空",
-            "periodDates": {years: weekly_dates(open_dates, start, end_date) for years, start in periods.items()},
+            "periodDates": period_dates,
             "percentileRule": "所选区间全部有效正日度数据，含相等值；不因曲线改用周打点而改成周样本排名",
         },
-        "sourceSnapshotDate": previous.get("sourceSnapshotDate", previous["generatedAt"][:10].replace("-", "")) if previous else datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y%m%d"),
+        "sourceSnapshotDate": previous.get("sourceSnapshotDate", previous["generatedAt"][:10].replace("-", "")) if args.reuse_snapshot else datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y%m%d"),
+        "rawHistorySnapshot": raw_snapshot,
         "periodStarts": periods,
         "generatedAt": datetime.now(ZoneInfo("Asia/Shanghai")).isoformat(timespec="seconds"),
         "industries": sorted_industries,
@@ -349,9 +380,19 @@ def main():
             if value["latest"]["date"] and value["latest"]["date"] != end_date
         },
     }
-    OUTPUT.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-    OUTPUT_JS.write_text("window.SECTOR_REAL_DATA = " + json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + ";\n", encoding="utf-8")
-    print(f"wrote {OUTPUT}")
+    ignored = {"generatedAt", "sourceSnapshotDate"}
+    if previous and {k: v for k, v in payload.items() if k not in ignored} == {k: v for k, v in previous.items() if k not in ignored}:
+        print("Daily data unchanged; preserving published files and cache versions.", flush=True)
+    else:
+        text = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
+        OUTPUT.write_text(text, encoding="utf-8")
+        OUTPUT_JS.write_text("window.SECTOR_REAL_DATA = " + text + ";\n", encoding="utf-8")
+        page = ROOT / "outputs/index.html"
+        html = re.sub(r"(sector_real_data\.js\?v=)[^\"\s]+",
+                      lambda m: m[1] + hashlib.sha256(text.encode()).hexdigest()[:12], page.read_text())
+        page.write_text(html)
+        print(f"wrote {OUTPUT}", flush=True)
+    print(f"Sector refresh: {time.perf_counter() - started:.2f}s; daily requests={len(daily_dates)}, full-history chunks={full_requests}", flush=True)
 
 
 if __name__ == "__main__":

@@ -30,10 +30,20 @@
 
 ## 重新生成
 
-```powershell
-python work/build_real_sector_data.py
-python work/build_market_modules_data.py
-python work/build_company_data.py
+```sh
+npm run refresh
+```
+
+默认使用增量刷新：保留本地完整日线，一次按交易日获取全部行业，只补新增交易日，并复核原快照最近两个交易日的修订。比如新增3个交易日，申万日线只需5次请求，替代原来的165个行业×3段历史共495次请求。所有曲线仍按周打点，分位仍用完整日度样本计算。
+
+第一次会从已有日线缓存迁移；新克隆且没有本地缓存时才初始化完整历史。原始日线快照压缩保存在忽略提交的 `work/.tushare-cache/sector-history/` 中，刷新中断不会覆盖已有快照。没有数据变化时不重写发布文件；有变化时自动更新页面的数据版本号。
+
+此命令更新当前页面使用的行业行情、估值、分位和公司市值，并输出耗时。`build_market_modules_data.py` 是页面已停用的旧市场模块，日常刷新不运行它。页面默认选择电子，显示近10年。
+
+需要复核更早的历史修订时，手动执行全量刷新：
+
+```sh
+npm run refresh -- --full-refresh
 ```
 
 只重建现有快照的曲线采样、保留行情截止日及原始日线版本：
@@ -42,4 +52,4 @@ python work/build_company_data.py
 python3 work/build_real_sector_data.py --reuse-snapshot
 ```
 
-该模式读取快照的 `sourceSnapshotDate`（旧快照按 `generatedAt` 日期）对应的本地 `work/.tushare-cache/`；缺少原日线缓存会明确失败。常规生成命令仍获取最新可用行情，并自动按周打点。
+该模式读取发布快照引用的原始日线及交易日历，不前进数据日期；旧快照读取 `sourceSnapshotDate`（缺省按 `generatedAt` 日期）对应的本地响应缓存。缺少原始日线缓存会明确失败，不会改用其他版本的数据。
