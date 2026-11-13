@@ -535,6 +535,7 @@
           <div>
             <h2>总览</h2>
             <div class="scope" id="scopeText">当前：有色金属（申万一级）</div>
+            <div class="chart-desc" id="samplingNote">全页按周打点 · 历史分位按日度样本计算</div>
           </div>
           <div class="periods" aria-label="时间跨度">
             <button class="period active" data-years="1">1年</button>
@@ -556,7 +557,7 @@
         <section class="charts">
           <article class="chart-card panel">
             <div class="chart-top">
-              <div><div class="chart-title">指数价格走势</div><div class="chart-desc" id="priceDesc">申万真实行情采样点，区间起点归一为 100</div></div>
+              <div><div class="chart-title">指数价格走势</div><div class="chart-desc" id="priceDesc">每周最后交易日打点，区间首个有效点归一为 100</div></div>
               <div class="legend" id="legend-price"></div>
             </div>
             <div class="chart-wrap"><canvas id="priceChart"></canvas><div class="tip"></div></div>
@@ -636,12 +637,12 @@
             <div class="company-note">成分口径：当前申万 SW2021 行业归属；市值单位：亿元。停牌等情况下使用最近可用数据，日期逐行标注。</div>
           </div>
         </section>
-        <div class="footnote">说明：本页行业分类、指数点位、区间涨跌、PE、市值排序均来自 Tushare 申万 SW2021 行情；滚动年利润为 total_mv / PE 的隐含 TTM 利润。估值与交易热度模块使用所选申万行业指数的 PE、PB、成交额（万元）、成交量（万股）与流通市值（万元）。成交额/流通市值按金额计算，用于观察交易活跃度。历史分位按所选区间内全部有效日度数据计算。若某指标暂未接入稳定口径，则显示暂无真实数据。</div>
+        <div class="footnote">说明：本页行业分类、指数点位、区间涨跌、PE、市值排序均来自 Tushare 申万 SW2021 行情；滚动年利润为 total_mv / PE 的隐含 TTM 利润。全页曲线统一取每周最后一个交易日，当前周取最新可用日；各指数按同一日期对齐，缺失留空。成交额、成交量等点值为该交易日数据，不是整周合计。估值与交易热度模块使用所选申万行业指数的 PE、PB、成交额（万元）、成交量（万股）与流通市值（万元）。成交额/流通市值按金额计算，用于观察交易活跃度。历史分位仍按所选区间内全部有效日度数据计算；与2.2对比分位时，应使用相同的起止日期和被评估日期。若某指标暂未接入稳定口径，则显示暂无真实数据。</div>
       </main>
     </div>
   </div>
 
-  <script src="sector_real_data.js?v=99bd6d7cd8f3"></script>
+  <script src="sector_real_data.js?v=cc6f3dd8e229"></script>
   <script src="company_details_data.js?v=dd87b944e4c1"></script>
   <script>
     const companyData = window.COMPANY_DETAILS_DATA || null;
@@ -740,7 +741,7 @@
     }
 
     function seriesLabels(name, years) {
-      return periodData(name, years)?.labels || [];
+      return (periodData(name, years)?.dates || []).map(formatAsOf);
     }
 
     function selectedKeys() {
@@ -828,14 +829,14 @@
         if (config.id === 1) {
           document.getElementById("valuationChartTitle").textContent = line.percentile ? "PE历史分位走势" : "估值走势";
           document.getElementById("valuationChartDesc").textContent = line.percentile
-            ? "各时点 PE 在所选区间全部有效日度 PE 中的位置（0–100%），最新分位与上方卡片一致。"
-            : "展示所选行业指数的真实估值，可切换 PE、PB 与 PE历史分位，并对比多个指数。";
+            ? "按周展示各时点 PE 在所选区间全部有效日度 PE 中的位置（0–100%）；分位计算不改为周采样。"
+            : "每周最后交易日的真实估值，可切换 PE、PB 与 PE历史分位，并对比多个指数。";
         }
         const series = picks.map(pick => {
           const period = periodData(pick.name, state.years);
           return {
             name: selectionName(pick), values: period?.[line.key] || [],
-            labels: (period?.dates || []).map(formatAsOf)
+            labels: seriesLabels(pick.name, state.years)
           };
         });
         document.getElementById(`legend-module${config.id}`).innerHTML = picks.map((pick, i) =>
@@ -992,11 +993,21 @@
       }
 
       setData(series, labels, emptyMessage = "暂无足够真实数据") {
+        this.tip.style.display = "none";
+        this.geom = null;
         if (series.some(s => s.labels?.some(label => label.length === 10))) {
           labels = [...new Set(series.flatMap(s => s.labels || []))].sort();
+          if (state.years === "all") {
+            const periods = selectedKeys().map(pick => periodData(pick.name, "all")).filter(Boolean);
+            const starts = periods.map(p => p.observedStartDate).filter(Boolean).sort();
+            const ends = periods.map(p => p.observedEndDate).filter(Boolean).sort();
+            if (starts.length && ends.length) {
+              labels = labels.filter(day => day >= formatAsOf(starts[0]) && day <= formatAsOf(ends.at(-1)));
+            }
+          }
           series = series.map(s => {
             const byDate = new Map((s.labels || []).map((date, i) => [date, s.values[i]]));
-            return { ...s, values: labels.map(date => byDate.get(date)) };
+            return { ...s, values: labels.map(date => byDate.get(date) ?? null) };
           });
         }
         this.data = series;
@@ -1039,21 +1050,20 @@
           const value = hi-(hi-lo)*i/4;
           x.fillText(this.percentile ? value.toFixed(0)+"%" : this.kind === "pe" ? value.toFixed(1)+"x" : value.toFixed(this.unit === "%" ? 1 : 0), 5, y+3);
         }
-        const tickCount = Math.min(5, Math.max(2, Math.floor((W-pad.l-pad.r)/100)+1));
+        const tickCount = Math.min(this.labels.length, 5, Math.max(2, Math.floor((W-pad.l-pad.r)/100)+1));
         x.textAlign = "center";
         for (let i=0;i<tickCount;i++) {
-          const idx = Math.round((this.labels.length-1)*i/(tickCount-1));
+          const idx = Math.round((this.labels.length-1)*i/Math.max(1,tickCount-1));
           const xx = pad.l+(W-pad.l-pad.r)*this.positions[idx];
           const label = (this.labels[idx] || "").slice(0, W < 500 ? 7 : 10);
           x.textAlign = i === 0 ? "left" : (i === tickCount - 1 ? "right" : "center");
           x.fillText(label, i === 0 ? pad.l : (i === tickCount - 1 ? W - 6 : xx), H-12);
         }
-        numericSeries.forEach((s, si) => {
-          x.strokeStyle = seriesColor(si); x.lineWidth = 2; x.lineJoin = "round";
+        numericSeries.forEach(s => {
+          x.strokeStyle = seriesColor(this.data.indexOf(s)); x.lineWidth = 2; x.lineJoin = "round";
           x.beginPath();
           let started = false;
           s.values.forEach((v,i) => {
-            if (v === undefined) return; // Another series has a sample on this date.
             if (!Number.isFinite(v)) {
               started = false;
               return;
@@ -1064,6 +1074,16 @@
             started = true;
           });
           x.stroke();
+          // A lone valid observation must remain visible even when its neighbours are missing.
+          x.fillStyle = x.strokeStyle;
+          s.values.forEach((v,i) => {
+            if (!Number.isFinite(v)) return;
+            const isolated = !Number.isFinite(s.values[i-1]) && !Number.isFinite(s.values[i+1]);
+            if (this.labels.length > 60 && !isolated) return;
+            const xx = pad.l+(W-pad.l-pad.r)*this.positions[i];
+            const yy = pad.t+(H-pad.t-pad.b)*(hi-v)/(hi-lo);
+            x.beginPath(); x.arc(xx,yy,2,0,Math.PI*2); x.fill();
+          });
         });
       }
 
@@ -1113,10 +1133,10 @@
       const all = {};
       document.getElementById("priceDesc").textContent =
         state.years === "all"
-          ? "各行业从最早可用数据展示至最新，按实际日期对齐，区间起点归一为 100"
+          ? "全部历史按每周最后交易日对齐，区间首个有效点归一为 100；缺失留空"
           : state.years === 20
           ? "仅展示具备完整 20 年历史的行业；历史不足的行业保留为空"
-          : "申万真实行情采样点，区间起点归一为 100";
+          : "每周最后交易日打点，当前周取最新可用日，区间首个有效点归一为 100";
       ["price","profit","pe"].forEach(kind => {
         all[kind] = picks.map(s => ({
           name: s.name,
