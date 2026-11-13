@@ -538,10 +538,10 @@
             <div class="chart-desc" id="samplingNote">全页按周打点 · 历史分位按日度样本计算</div>
           </div>
           <div class="periods" aria-label="时间跨度">
-            <button class="period active" data-years="1">1年</button>
+            <button class="period" data-years="1">1年</button>
             <button class="period" data-years="3">3年</button>
             <button class="period" data-years="5">5年</button>
-            <button class="period" data-years="10">10年</button>
+            <button class="period active" data-years="10">10年</button>
             <button class="period" data-years="20">20年</button>
             <button class="period" data-years="all">全部</button>
           </div>
@@ -693,7 +693,7 @@
     }
 
     const colors = ["#c94b42","#356f8c","#b28a43","#497768","#8a5e8d","#d17d3f"];
-    const state = { years: 1, selections: [{ level: 1, parent: "有色金属", name: "有色金属" }] };
+    const state = { years: 10, selections: [{ level: 1, parent: "有色金属", name: "有色金属" }] };
     const charts = [];
     const moduleCharts = [];
     const moduleConfigs = [
