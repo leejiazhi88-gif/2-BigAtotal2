@@ -1,3 +1,5 @@
+import argparse
+import hashlib
 import json
 import math
 import re
@@ -10,6 +12,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from tushare_fetch import cached_call, date_chunks
+from weekly_sampling import sample_dates, weekly_dates
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -118,27 +121,6 @@ def ymd(date_text):
     return datetime.strptime(date_text, "%Y%m%d")
 
 
-def sample_rows(rows, start_date, max_points):
-    filtered = [row for row in rows if row["trade_date"] >= start_date and row.get("close")]
-    if len(filtered) < 2:
-        return []
-    filtered.sort(key=lambda row: row["trade_date"])
-    span_days = (ymd(filtered[-1]["trade_date"]) - ymd(start_date)).days
-    # If the index did not exist near the requested start, do not pretend this is a full-period series.
-    first_gap = (ymd(filtered[0]["trade_date"]) - ymd(start_date)).days
-    if span_days > 365 and first_gap > 90:
-        return []
-    if len(filtered) <= max_points:
-        return filtered
-    picked = []
-    last_index = len(filtered) - 1
-    for i in range(max_points):
-        idx = round(i * last_index / (max_points - 1))
-        if not picked or picked[-1]["trade_date"] != filtered[idx]["trade_date"]:
-            picked.append(filtered[idx])
-    return picked
-
-
 def normalize_series(rows, key):
     vals = []
     for row in rows:
@@ -152,10 +134,7 @@ def normalize_series(rows, key):
             vals.append(None)
             continue
         vals.append(value if math.isfinite(value) else None)
-    if key == "close" and vals and vals[0]:
-        base = vals[0]
-        return [None if value is None else round(value / base * 100, 2) for value in vals]
-    if key == "profit":
+    if key in ("close", "profit"):
         valid = next((value for value in vals if value and value > 0), None)
         if valid:
             return [None if value is None else round(value / valid * 100, 2) for value in vals]
@@ -206,7 +185,7 @@ def valuation_percentile_series(rows, key, sample):
     return result
 
 
-def build_history(rows):
+def build_history(rows, open_dates, end_date):
     rows = [row for row in rows if row.get("trade_date")]
     rows.sort(key=lambda row: row["trade_date"])
     for row in rows:
@@ -219,23 +198,21 @@ def build_history(rows):
         row["amountFloatRatio"] = amount / float_mv * 100 if amount is not None and float_mv and float_mv > 0 else None
     latest = rows[-1] if rows else {}
     periods = {}
-    max_points = {"1": 64, "3": 72, "5": 72, "10": 84, "20": 96, "all": 160}
     for years in (*PERIOD_YEARS, "all"):
-        start = rows[0]["trade_date"] if years == "all" and rows else (
-            START_DATE if years == "all" else shift_years(END_DATE, int(years)))
-        sample = sample_rows(rows, start, max_points[years])
-        if not sample:
+        start = START_DATE if years == "all" else shift_years(end_date, int(years))
+        dates = weekly_dates(open_dates, start, end_date)
+        sample = sample_dates(rows, dates)
+        valid_rows = [row for row in sample if row.get("close")]
+        # Retain the existing full-history requirement for numbered time ranges.
+        raw_period = [row for row in rows if start <= row["trade_date"] <= end_date and row.get("close")]
+        if years != "all" and int(years) > 1 and (not raw_period or (ymd(raw_period[0]["trade_date"]) - ymd(start)).days > 90):
             periods[years] = None
             continue
-        close_values = [float(row["close"]) for row in sample]
-        ret = (close_values[-1] / close_values[0] - 1) * 100
-        full_period = [row for row in rows if row["trade_date"] >= start]
+        ret = (float(valid_rows[-1]["close"]) / float(valid_rows[0]["close"]) - 1) * 100 if valid_rows else None
+        full_period = [row for row in rows if start <= row["trade_date"] <= end_date]
         periods[years] = {
             "dates": [row["trade_date"] for row in sample],
-            "labels": [
-                ymd(row["trade_date"]).strftime("%Y-%m-%d" if years == "all" else "%Y-%m")
-                for row in sample
-            ],
+            "labels": [ymd(row["trade_date"]).strftime("%Y-%m-%d") for row in sample],
             "price": normalize_series(sample, "close"),
             "profit": normalize_series(sample, "profit"),
             "pe": normalize_series(sample, "pe"),
@@ -244,9 +221,11 @@ def build_history(rows):
             "amountYi": normalize_series(sample, "amountYi"),
             "volumeYi": normalize_series(sample, "volumeYi"),
             "amountFloatRatio": normalize_series(sample, "amountFloatRatio"),
-            "return": round(ret, 2),
-            "startDate": sample[0]["trade_date"],
-            "endDate": sample[-1]["trade_date"],
+            "return": round(ret, 2) if ret is not None else None,
+            "startDate": start,
+            "endDate": end_date,
+            "observedStartDate": valid_rows[0]["trade_date"] if valid_rows else None,
+            "observedEndDate": valid_rows[-1]["trade_date"] if valid_rows else None,
             "pePercentile": valuation_percentile(full_period, "pe", latest),
             "pbPercentile": valuation_percentile(full_period, "pb", latest),
         }
@@ -269,14 +248,23 @@ def build_history(rows):
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Build sector data with common weekly observations and daily valuation ranks.")
+    parser.add_argument("--reuse-snapshot", action="store_true", help="Resample the existing published snapshot without advancing its as-of date.")
+    args = parser.parse_args()
     token = get_token()
-    global END_DATE
-    END_DATE = latest_sw_date(token)
-    periods = {years: shift_years(END_DATE, int(years)) for years in PERIOD_YEARS}
+    previous = json.loads(OUTPUT.read_text()) if args.reuse_snapshot else None
+    end_date = previous["asOf"] if previous else latest_sw_date(token)
+    calendar_rows = cached_call(call_api, token, "trade_cal", {
+        "exchange": "SSE", "start_date": START_DATE, "end_date": end_date, "is_open": "1",
+    }, "cal_date,is_open")
+    open_dates = sorted(row["cal_date"] for row in calendar_rows if str(row["is_open"]) == "1")
+    if not open_dates:
+        raise RuntimeError("No trading dates in the requested calendar")
+    periods = {years: shift_years(end_date, int(years)) for years in PERIOD_YEARS}
     periods["all"] = START_DATE
-    print(f"latest SW date: {END_DATE}", flush=True)
-    l1_rows = call_api(token, "index_classify", {"src": "SW2021", "level": "L1"}, "index_code,industry_name,parent_code,level,industry_code")
-    l2_rows = call_api(token, "index_classify", {"src": "SW2021", "level": "L2"}, "index_code,industry_name,parent_code,level")
+    print(f"SW data as of {end_date}; common weekly observations", flush=True)
+    l1_rows = [] if previous else call_api(token, "index_classify", {"src": "SW2021", "level": "L1"}, "index_code,industry_name,parent_code,level,industry_code")
+    l2_rows = [] if previous else call_api(token, "index_classify", {"src": "SW2021", "level": "L2"}, "index_code,industry_name,parent_code,level")
 
     l1_by_code = {row["industry_code"]: clean_name(row["industry_name"]) for row in l1_rows}
     children = {name: [] for name in l1_by_code.values()}
@@ -299,25 +287,36 @@ def main():
         code_by_name[name] = row["index_code"]
         level_by_name[name] = 2
 
+    if previous:
+        children, code_by_name, level_by_name = previous["industries"], previous["codes"], previous["levels"]
+
     metrics = {}
     fields = "ts_code,trade_date,name,close,pe,pb,total_mv,float_mv,amount,vol,pct_change"
     items = list(code_by_name.items())
     for idx, (name, code) in enumerate(items, 1):
         print(f"[{idx}/{len(items)}] {name} {code}", flush=True)
         by_date = {}
-        for start, end in date_chunks(START_DATE, END_DATE, years=10):
-            chunk = cached_call(call_api, token, "sw_daily",
-                                {"ts_code": code, "start_date": start, "end_date": end}, fields)
+        for start, end in date_chunks(START_DATE, end_date, years=10):
+            params = {"ts_code": code, "start_date": start, "end_date": end}
+            if previous:
+                request = json.dumps(["sw_daily", params, fields], sort_keys=True)
+                key = hashlib.sha256(request.encode()).hexdigest() + ".json"
+                cache_day = previous.get("sourceSnapshotDate", previous["generatedAt"][:10].replace("-", ""))
+                path = ROOT / "work" / ".tushare-cache" / cache_day / key
+                chunk = json.loads(path.read_text(encoding="utf-8"))
+            else:
+                chunk = cached_call(call_api, token, "sw_daily", params, fields)
             if len(chunk) >= 4000:
                 raise RuntimeError(f"SW response reached its row cap: {code}, {start}-{end}")
             by_date.update({row["trade_date"]: row for row in chunk})
         rows = list(by_date.values())
-        if rows and max(by_date) != END_DATE:
+        if rows and max(by_date) != end_date:
             print(f"  Last published SW date for {name}: {max(by_date)}", flush=True)
         if not rows:
             print(f"  No published SW history for {name}; values remain unavailable.", flush=True)
-        metrics[name] = build_history(rows)
-        time.sleep(0.08)
+        metrics[name] = build_history(rows, open_dates, end_date)
+        if not previous:
+            time.sleep(0.08)
 
     # Sort using latest total market value, descending.
     sorted_industries = {}
@@ -330,7 +329,14 @@ def main():
 
     payload = {
         "source": "Tushare sw_daily / index_classify, SW2021",
-        "asOf": END_DATE,
+        "asOf": end_date,
+        "chartAsOf": end_date,
+        "sampling": {
+            "frequency": "week", "rule": "每周最后一个交易日，当前周取快照最新交易日；各指数使用共同日期，缺失留空",
+            "periodDates": {years: weekly_dates(open_dates, start, end_date) for years, start in periods.items()},
+            "percentileRule": "所选区间全部有效正日度数据，含相等值；不因曲线改用周打点而改成周样本排名",
+        },
+        "sourceSnapshotDate": previous.get("sourceSnapshotDate", previous["generatedAt"][:10].replace("-", "")) if previous else datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y%m%d"),
         "periodStarts": periods,
         "generatedAt": datetime.now(ZoneInfo("Asia/Shanghai")).isoformat(timespec="seconds"),
         "industries": sorted_industries,
@@ -340,7 +346,7 @@ def main():
         "unavailableIndustries": [name for name, value in metrics.items() if not value["latest"]["date"]],
         "historicalOnlyIndustries": {
             name: value["latest"]["date"] for name, value in metrics.items()
-            if value["latest"]["date"] and value["latest"]["date"] != END_DATE
+            if value["latest"]["date"] and value["latest"]["date"] != end_date
         },
     }
     OUTPUT.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
