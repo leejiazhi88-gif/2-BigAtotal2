@@ -409,6 +409,38 @@
     .module-kpi .metric-row { flex-wrap: wrap; }
     .module-kpi .metric-name { min-width: 0; white-space: normal; }
     .module-kpi .metric-number { font-size: 16px; }
+    .valuation-kpi { padding: 13px 14px 11px; }
+    .valuation-kpi .module-kpi-label { color: var(--ink); font-size: 12px; font-weight: 600; }
+    .valuation-kpi .module-kpi-note { font-weight: 400; }
+    .valuation-list { max-height: 300px; padding: 0 4px; }
+    .valuation-row { gap: 8px 10px; padding: 10px 0 14px; }
+    .valuation-row .metric-name { font-size: 12px; line-height: 1.5; }
+    .valuation-row .metric-number { font-size: 23px; font-variant-numeric: tabular-nums; }
+    .valuation-row .metric-number.is-missing { color: var(--muted); font-size: 12px; }
+    .pe-bar-track, .percentile-track {
+      grid-column: 1 / -1;
+      position: relative;
+      height: 12px;
+      border-radius: 3px;
+      background: #e9eef1;
+    }
+    .pe-bar-fill { height: 100%; border-radius: 3px; }
+    .percentile-track {
+      background: linear-gradient(to right, #34987e 0% 20%, #ccb05b 20% 80%, #bd596a 80% 100%);
+    }
+    .percentile-marker {
+      position: absolute;
+      top: -4px;
+      width: 7px;
+      height: 20px;
+      transform: translateX(-50%);
+      border: 2px solid #fff;
+      border-radius: 4px;
+      background: var(--ink);
+      box-shadow: 0 1px 4px #14212b55;
+    }
+    .valuation-scale { display: flex; justify-content: space-between; gap: 8px; margin-top: 5px; padding: 0 4px; color: var(--muted); font-size: 10px; }
+    .valuation-unavailable { grid-column: 1 / -1; color: var(--muted); font: 11px/1.5 "Microsoft YaHei", "PingFang SC", sans-serif; }
     .module-card .chart-top { flex-wrap: wrap; }
     .module-card .legend-item { white-space: nowrap; }
 
@@ -505,6 +537,9 @@
       .modules { grid-template-columns: 1fr; }
       .overview-head { align-items: flex-start; flex-direction: column; }
     }
+    @media (max-width: 600px) {
+      #moduleKpi1 { grid-template-columns: minmax(0, 1fr); }
+    }
   </style>
 </head>
 <body>
@@ -585,14 +620,14 @@
               <div class="module-index">1</div>
               <div>
                 <div class="module-title">估值</div>
-                <div class="module-desc">所选行业指数的 PE、PB 及其在当前时间范围内的历史分位。</div>
+                <div class="module-desc">用条形比较所选行业指数的 PE，用彩色条查看其在当前时间范围内的历史分位。</div>
               </div>
             </div>
             <div class="module-scope" id="moduleScope1"></div>
             <div class="module-kpis" id="moduleKpi1"></div>
             <div class="module-controls" id="moduleControls1" aria-label="估值指标"></div>
             <div class="chart-top">
-              <div><div class="chart-title" id="valuationChartTitle">估值走势</div><div class="chart-desc" id="valuationChartDesc">展示所选行业指数的真实估值，可切换 PE、PB 与 PE历史分位，并对比多个指数。</div></div>
+              <div><div class="chart-title" id="valuationChartTitle">估值走势</div><div class="chart-desc" id="valuationChartDesc">展示所选行业指数的真实估值，可切换 PE 与 PE历史分位，并对比多个指数。</div></div>
               <div class="legend" id="legend-module1"></div>
             </div>
             <div class="chart-wrap module-chart"><canvas id="moduleChart1"></canvas><div class="tip"></div></div>
@@ -637,7 +672,7 @@
             <div class="company-note">成分口径：当前申万 SW2021 行业归属；市值单位：亿元。停牌等情况下使用最近可用数据，日期逐行标注。</div>
           </div>
         </section>
-        <div class="footnote">说明：本页行业分类、指数点位、区间涨跌、PE、市值排序均来自 Tushare 申万 SW2021 行情；滚动年利润为 total_mv / PE 的隐含 TTM 利润。全页曲线统一取每周最后一个交易日，当前周取最新可用日；各指数按同一日期对齐，缺失留空。成交额、成交量等点值为该交易日数据，不是整周合计。估值与交易热度模块使用所选申万行业指数的 PE、PB、成交额（万元）、成交量（万股）与流通市值（万元）。成交额/流通市值按金额计算，用于观察交易活跃度。历史分位仍按所选区间内全部有效日度数据计算；与2.2对比分位时，应使用相同的起止日期和被评估日期。若某指标暂未接入稳定口径，则显示暂无真实数据。</div>
+        <div class="footnote">说明：本页行业分类、指数点位、区间涨跌、PE、市值排序均来自 Tushare 申万 SW2021 行情；滚动年利润为 total_mv / PE 的隐含 TTM 利润。全页曲线统一取每周最后一个交易日，当前周取最新可用日；各指数按同一日期对齐，缺失留空。成交额、成交量等点值为该交易日数据，不是整周合计。估值与交易热度模块使用所选申万行业指数的 PE、成交额（万元）、成交量（万股）与流通市值（万元）。成交额/流通市值按金额计算，用于观察交易活跃度。历史分位仍按所选区间内全部有效日度数据计算；与2.2对比分位时，应使用相同的起止日期和被评估日期。若某指标暂未接入稳定口径，则显示暂无真实数据。</div>
       </main>
     </div>
   </div>
@@ -701,13 +736,10 @@
         id: 1, activeKey: "pe",
         metrics: [
           { key: "pe", label: "指数 PE", format: "x" },
-          { key: "pb", label: "指数 PB", format: "x" },
-          { key: "pePercentile", label: "PE 历史分位", format: "rank" },
-          { key: "pbPercentile", label: "PB 历史分位", format: "rank" }
+          { key: "pePercentile", label: "PE 历史分位", format: "rank" }
         ],
         lines: [
           { key: "pe", name: "PE", unit: "x" },
-          { key: "pb", name: "PB", unit: "x" },
           { key: "pePercentileSeries", name: "PE历史分位", unit: "%", percentile: true }
         ]
       },
@@ -798,6 +830,10 @@
 
     function renderModuleKpis(config, picks) {
       const box = document.getElementById(`moduleKpi${config.id}`);
+      const valuation = config.id === 1;
+      const maxPe = Math.max(10, ...picks.map(pick => latestData(pick.name).pe).filter(Number.isFinite));
+      const peStep = 10 ** Math.floor(Math.log10(maxPe));
+      const peCeiling = Math.ceil(maxPe / peStep) * peStep;
       box.innerHTML = config.metrics.map(metric => {
         const note = metric.format === "rank"
           ? `<span class="module-kpi-note">${state.years === "all" ? "全部历史" : `近${state.years}年`}</span>` : "";
@@ -806,9 +842,20 @@
           const value = metric.format === "rank"
             ? periodData(pick.name, state.years)?.[metric.key] : latest[metric.key];
           const date = latest.date && latest.date !== realData?.asOf ? `（截至 ${formatAsOf(latest.date)}）` : "";
-          return `<div class="metric-row"><span class="metric-name" style="color:${seriesColor(index)}">${selectionName(pick)}${date}</span><span class="metric-number">${formatModuleValue(value, metric.format)}</span></div>`;
+          let visual = "";
+          if (valuation && Number.isFinite(value)) {
+            visual = metric.key === "pe"
+              ? value > 0
+                ? `<div class="pe-bar-track" role="img" aria-label="${selectionName(pick)} PE ${value.toFixed(2)}倍，刻度0至${peCeiling}倍"><div class="pe-bar-fill" style="width:${value / peCeiling * 100}%;background:${seriesColor(index)}"></div></div>`
+                : '<div class="valuation-unavailable">PE非正值，暂不作高低比较</div>'
+              : `<div class="percentile-track" role="meter" aria-label="${selectionName(pick)} PE历史分位" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${value}" aria-valuetext="${formatModuleValue(value, metric.format)}"><span class="percentile-marker" style="left:${Math.max(0, Math.min(100, value))}%" aria-hidden="true"></span></div>`;
+          }
+          return `<div class="metric-row${valuation ? ' valuation-row' : ''}"><span class="metric-name" style="color:${seriesColor(index)}">${selectionName(pick)}${date}</span><span class="metric-number${valuation && !Number.isFinite(value) ? ' is-missing' : ''}">${formatModuleValue(value, metric.format)}</span>${visual}</div>`;
         }).join("");
-        return `<div class="module-kpi"><div class="module-kpi-label">${metric.label}${note}</div><div class="module-kpi-value metric-list">${picks.length ? rows : '<div class="metric-empty">请选择行业指数</div>'}</div></div>`;
+        const scale = valuation && picks.length ? `<div class="valuation-scale">${metric.key === "pe"
+          ? `<span>0x</span><span>所选指数共用刻度</span><span>${peCeiling}x</span>`
+          : '<span>0% · 低</span><span>50%</span><span>高 · 100%</span>'}</div>` : "";
+        return `<div class="module-kpi${valuation ? ' valuation-kpi' : ''}"><div class="module-kpi-label">${metric.label}${note}</div><div class="module-kpi-value metric-list${valuation ? ' valuation-list' : ''}">${picks.length ? rows : '<div class="metric-empty">请选择行业指数</div>'}</div>${scale}</div>`;
       }).join("");
     }
 
@@ -830,7 +877,7 @@
           document.getElementById("valuationChartTitle").textContent = line.percentile ? "PE历史分位走势" : "估值走势";
           document.getElementById("valuationChartDesc").textContent = line.percentile
             ? "按周展示各时点 PE 在所选区间全部有效日度 PE 中的位置（0–100%）；分位计算不改为周采样。"
-            : "每周最后交易日的真实估值，可切换 PE、PB 与 PE历史分位，并对比多个指数。";
+            : "每周最后交易日的真实估值，可切换 PE 与 PE历史分位，并对比多个指数。";
         }
         const series = picks.map(pick => {
           const period = periodData(pick.name, state.years);
