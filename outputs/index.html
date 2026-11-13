@@ -101,11 +101,26 @@
     aside {
       position: sticky;
       top: 18px;
-      max-height: calc(100vh - 36px);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      height: calc(100dvh - 72px);
+      min-height: 0;
+    }
+
+    .time-controls { flex-shrink: 0; padding: 12px; background: #fff; }
+    .time-label { margin-bottom: 8px; color: var(--muted); font-size: 12px; font-weight: 600; }
+
+    .filter-panel {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
       overflow: hidden;
     }
 
     .filter-head {
+      flex-shrink: 0;
       padding: 19px 18px 15px;
       border-bottom: 1px solid var(--line);
     }
@@ -148,8 +163,8 @@
     }
 
     .filter-list {
-      height: calc(100vh - 198px);
-      min-height: 480px;
+      flex: 1;
+      min-height: 0;
       overflow: auto;
       padding: 9px 10px 18px;
       scrollbar-width: thin;
@@ -243,9 +258,9 @@
     }
 
     .periods {
-      display: flex;
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
       max-width: 100%;
-      overflow-x: auto;
       padding: 3px;
       border: 1px solid var(--line);
       border-radius: 9px;
@@ -253,15 +268,15 @@
     }
 
     .period {
-      flex-shrink: 0;
-      min-width: 48px;
-      padding: 7px 10px;
+      min-width: 0;
+      padding: 8px 2px;
       border: 0;
       border-radius: 6px;
       background: transparent;
       color: var(--muted);
       font-size: 12px;
       font-weight: 700;
+      white-space: nowrap;
       cursor: pointer;
     }
     .period.active {
@@ -531,8 +546,9 @@
       header { display: block; }
       .asof { margin-top: 14px; text-align: left; }
       .workspace { grid-template-columns: 1fr; }
-      aside { position: static; max-height: none; }
-      .filter-list { height: 280px; min-height: 0; }
+      aside { display: contents; }
+      .time-controls { position: sticky; top: 8px; z-index: 10; }
+      .filter-list { flex: none; height: 280px; }
       .summary-grid { grid-template-columns: repeat(2, 1fr); }
       .modules { grid-template-columns: 1fr; }
       .overview-head { align-items: flex-start; flex-direction: column; }
@@ -554,15 +570,28 @@
     </header>
 
     <div class="workspace">
-      <aside class="panel">
-        <div class="filter-head">
-          <div class="filter-title">
-            <h2>行业筛选</h2>
-            <button class="clear" id="selectAllBtn">全选</button>
+      <aside aria-label="时间与行业筛选">
+        <div class="time-controls panel">
+          <div class="time-label" id="timeRangeLabel">全局时间范围</div>
+          <div class="periods" role="group" aria-labelledby="timeRangeLabel">
+            <button class="period" data-years="1" aria-pressed="false">1年</button>
+            <button class="period" data-years="3" aria-pressed="false">3年</button>
+            <button class="period" data-years="5" aria-pressed="false">5年</button>
+            <button class="period active" data-years="10" aria-pressed="true">10年</button>
+            <button class="period" data-years="20" aria-pressed="false">20年</button>
+            <button class="period" data-years="all" aria-pressed="false">全部</button>
           </div>
-          <input class="search" id="search" placeholder="搜索一级或二级行业">
         </div>
-        <div class="filter-list" id="filterList"></div>
+        <div class="filter-panel panel">
+          <div class="filter-head">
+            <div class="filter-title">
+              <h2>行业筛选</h2>
+              <button class="clear" id="selectAllBtn">全选</button>
+            </div>
+            <input class="search" id="search" placeholder="搜索一级或二级行业">
+          </div>
+          <div class="filter-list" id="filterList"></div>
+        </div>
       </aside>
 
       <main>
@@ -571,14 +600,6 @@
             <h2>总览</h2>
             <div class="scope" id="scopeText">当前：有色金属（申万一级）</div>
             <div class="chart-desc" id="samplingNote">全页按周打点 · 历史分位按日度样本计算</div>
-          </div>
-          <div class="periods" aria-label="时间跨度">
-            <button class="period" data-years="1">1年</button>
-            <button class="period" data-years="3">3年</button>
-            <button class="period" data-years="5">5年</button>
-            <button class="period active" data-years="10">10年</button>
-            <button class="period" data-years="20">20年</button>
-            <button class="period" data-years="all">全部</button>
           </div>
         </section>
 
@@ -1239,8 +1260,10 @@
     moduleCharts.push(new LineChart(document.getElementById("moduleChart2"), "module"));
 
     document.querySelectorAll(".period").forEach(btn => btn.onclick = () => {
-      document.querySelectorAll(".period").forEach(b => b.classList.remove("active"));
-      btn.classList.add("active");
+      document.querySelectorAll(".period").forEach(b => {
+        b.classList.toggle("active", b === btn);
+        b.setAttribute("aria-pressed", String(b === btn));
+      });
       state.years = btn.dataset.years === "all" ? "all" : +btn.dataset.years;
       update();
     });
