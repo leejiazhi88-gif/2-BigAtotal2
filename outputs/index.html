@@ -698,7 +698,7 @@
     </div>
   </div>
 
-  <script src="sector_real_data.js?v=e7813bafc1f7"></script>
+  <script src="sector_web_data.js?v=8770022b1946"></script>
   <script src="company_details_data.js?v=72bb2d0a04b8"></script>
   <script>
     const companyData = window.COMPANY_DETAILS_DATA || null;
@@ -1176,8 +1176,34 @@
       }
     }
 
-    function update() {
+    const historyLoads = new Map();
+    let updateSequence = 0;
+    async function ensureHistory(name) {
+      if (realData?.metrics?.[name]?.periods || !realData?.historyFiles?.[name]) return;
+      if (!historyLoads.has(name)) {
+        historyLoads.set(name, fetch(realData.historyFiles[name]).then(response => {
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          return response.json();
+        }).then(metric => { realData.metrics[name] = metric; }).catch(error => {
+          historyLoads.delete(name);
+          throw error;
+        }));
+      }
+      await historyLoads.get(name);
+    }
+    async function update() {
+      const sequence = ++updateSequence;
       const picks = selectedKeys();
+      if (picks.some(pick => !realData?.metrics?.[pick.name]?.periods)) {
+        document.getElementById("scopeText").textContent = "正在加载所选赛道历史数据…";
+        try {
+          await Promise.all(picks.map(pick => ensureHistory(pick.name)));
+        } catch (error) {
+          if (sequence === updateSequence) document.getElementById("scopeText").textContent = "数据加载失败，请重新选择行业重试。";
+          return;
+        }
+      }
+      if (sequence !== updateSequence) return;
       renderCompanyDetails();
       const names = picks.map(s => s.level === 2 ? `${s.parent} · ${s.name}` : s.name);
       const visibleNames = names.slice(0, 4);

@@ -392,6 +392,8 @@ def main():
                       lambda m: m[1] + hashlib.sha256(text.encode()).hexdigest()[:12], page.read_text())
         page.write_text(html)
         print(f"wrote {OUTPUT}", flush=True)
+    from build_web_data import build_web_data
+    build_web_data()
     print(f"Sector refresh: {time.perf_counter() - started:.2f}s; daily requests={len(daily_dates)}, full-history chunks={full_requests}", flush=True)
 
 
