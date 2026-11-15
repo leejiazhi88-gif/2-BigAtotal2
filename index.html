@@ -1038,7 +1038,7 @@
         node.querySelector(".toggle").onclick = toggleIndustry;
         node.querySelector(".sector-name").onclick = toggleIndustry;
         const setParentSelection = checked => {
-          state.selections = state.selections.filter(s => !(s.parent === parent && s.level === 1));
+          state.selections = state.selections.filter(s => s.parent !== parent);
           if (checked) state.selections.push({ level: 1, parent, name: parent });
           update();
           prefetchIndustry(parent);
