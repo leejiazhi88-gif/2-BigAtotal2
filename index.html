@@ -1031,12 +1031,17 @@
               return `<label class="child"><input class="check child-check" data-child="${child}" type="checkbox" ${checked ? "checked" : ""}><span>${child}</span><span class="child-mv">${formatMarketCap(marketCap(child))}</span></label>`;
             }).join("")}
           </div>`;
-        node.querySelector(".toggle").onclick = () => node.classList.toggle("open");
-        node.querySelector(".sector-name").onclick = () => node.classList.toggle("open");
+        const toggleIndustry = () => {
+          node.classList.toggle("open");
+          prefetchIndustry(parent);
+        };
+        node.querySelector(".toggle").onclick = toggleIndustry;
+        node.querySelector(".sector-name").onclick = toggleIndustry;
         const setParentSelection = checked => {
           state.selections = state.selections.filter(s => !(s.parent === parent && s.level === 1));
           if (checked) state.selections.push({ level: 1, parent, name: parent });
           update();
+          prefetchIndustry(parent);
         };
         node.querySelector(".parent-check").onchange = e => setParentSelection(e.target.checked);
         node.querySelector(".all-check").onchange = e => setParentSelection(e.target.checked);
@@ -1045,6 +1050,7 @@
           state.selections = state.selections.filter(s => !(s.parent === parent && s.name === child));
           if (e.target.checked) state.selections.push({ level: 2, parent, name: child });
           update();
+          prefetchIndustry(parent);
         });
         root.appendChild(node);
       });
@@ -1191,6 +1197,31 @@
       }
       await historyLoads.get(name);
     }
+    const prefetchQueue = [];
+    const prefetchQueued = new Set();
+    let activePrefetches = 0;
+    function prefetchIndustry(parent) {
+      for (const name of [parent, ...(industries[parent] || [])]) {
+        if (realData?.metrics?.[name]?.periods || prefetchQueued.has(name)) continue;
+        prefetchQueued.add(name);
+        prefetchQueue.push(name);
+      }
+      drainPrefetchQueue();
+    }
+    function drainPrefetchQueue() {
+      // Leave connection capacity for the sector the user is actively selecting.
+      while (activePrefetches < 2 && prefetchQueue.length) {
+        const name = prefetchQueue.shift();
+        activePrefetches++;
+        ensureHistory(name).catch(() => {
+          // A later click can retry a failed background download.
+        }).finally(() => {
+          prefetchQueued.delete(name);
+          activePrefetches--;
+          drainPrefetchQueue();
+        });
+      }
+    }
     async function update() {
       const sequence = ++updateSequence;
       const picks = selectedKeys();
@@ -1309,6 +1340,7 @@
     };
     window.addEventListener("resize", () => [...charts, ...moduleCharts].forEach(c => c.draw()));
     update();
+    prefetchIndustry("电子");
   </script>
 </body>
 </html>
