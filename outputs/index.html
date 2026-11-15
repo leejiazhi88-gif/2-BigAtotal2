@@ -1016,7 +1016,7 @@
         node.innerHTML = `
           <div class="sector-row">
             <button class="toggle" aria-label="展开">›</button>
-            <input class="check parent-check" type="checkbox" ${parentSelected ? "checked" : ""}>
+            <input class="check parent-check" type="checkbox" ${parentSelected || hasChildSelected ? "checked" : ""}>
             <span class="sector-name">${parent}</span>
             <span class="child-count">${formatMarketCap(marketCap(parent))}</span>
           </div>
