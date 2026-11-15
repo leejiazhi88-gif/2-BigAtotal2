@@ -1037,13 +1037,14 @@
         };
         node.querySelector(".toggle").onclick = toggleIndustry;
         node.querySelector(".sector-name").onclick = toggleIndustry;
-        const setParentSelection = checked => {
-          state.selections = state.selections.filter(s => s.parent !== parent);
+        const setParentSelection = (checked, clearChildren = false) => {
+          state.selections = state.selections.filter(s =>
+            s.parent !== parent || (!clearChildren && s.level === 2));
           if (checked) state.selections.push({ level: 1, parent, name: parent });
           update();
           prefetchIndustry(parent);
         };
-        node.querySelector(".parent-check").onchange = e => setParentSelection(e.target.checked);
+        node.querySelector(".parent-check").onchange = e => setParentSelection(e.target.checked, true);
         node.querySelector(".all-check").onchange = e => setParentSelection(e.target.checked);
         node.querySelectorAll(".child-check").forEach(input => input.onchange = e => {
           const child = e.target.dataset.child;
