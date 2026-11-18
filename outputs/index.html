@@ -4,8 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>2-BigAtotal2</title>
+  <script>
+    // Apply the saved palette before the first paint.
+    try { document.documentElement.dataset.theme = localStorage.getItem("2-BigAtotal2-theme") === "dark" ? "dark" : "light"; }
+    catch { document.documentElement.dataset.theme = "light"; }
+  </script>
   <style>
     :root {
+      color-scheme: light;
       --bg: #f2f5f8;
       --panel: rgba(255, 255, 255, 0.94);
       --ink: #14212b;
@@ -17,6 +23,58 @@
       --gold: #b28a43;
       --green: #497768;
       --shadow: 0 14px 40px rgba(25, 43, 54, 0.07);
+      --surface: #fff;
+      --subtle: #f4f6f7;
+      --hover: #f5f7f8;
+      --kpi-bg: #fbfcfd;
+      --soft-line: #edf1f3;
+      --faint: #89949b;
+      --track: #e9eef1;
+      --grid: #e7ebee;
+      --table-head: #edf2f3;
+      --page-top: #f8fafb;
+      --glow: rgba(183, 207, 218, .35);
+      --panel-line: rgba(214, 222, 227, .9);
+      --series-0: #c94b42;
+      --series-1: #356f8c;
+      --series-2: #b28a43;
+      --series-3: #497768;
+      --series-4: #8a5e8d;
+      --series-5: #d17d3f;
+    }
+
+    :root[data-theme="dark"] {
+      color-scheme: dark;
+      --bg: #10181d;
+      --panel: #182329;
+      --ink: #dce7ec;
+      --muted: #9bafb5;
+      --line: #304149;
+      --red: #f18e84;
+      --red-soft: #3a292a;
+      --blue: #79b8d6;
+      --gold: #e0c478;
+      --green: #78c5ab;
+      --shadow: 0 10px 30px #0002;
+      --surface: #1c2a30;
+      --subtle: #1d2d32;
+      --hover: #263b3d;
+      --kpi-bg: #1b2a30;
+      --soft-line: #2a3c43;
+      --faint: #91a7b0;
+      --track: #30454d;
+      --grid: #304149;
+      --table-head: #22343b;
+      --page-top: #10181d;
+      --glow: rgba(52, 82, 91, .22);
+      --panel-line: #304149;
+      --series-0: #f18e84;
+      --series-1: #79b8d6;
+      --series-2: #e0c478;
+      --series-3: #78c5ab;
+      --series-4: #c499d0;
+      --series-5: #eda36f;
+      scrollbar-color: #45616b #172329;
     }
 
     * { box-sizing: border-box; }
@@ -24,8 +82,8 @@
       margin: 0;
       color: var(--ink);
       background:
-        radial-gradient(circle at 85% 5%, rgba(183, 207, 218, .35), transparent 28%),
-        linear-gradient(180deg, #f8fafb 0, var(--bg) 440px);
+        radial-gradient(circle at 85% 5%, var(--glow), transparent 28%),
+        linear-gradient(180deg, var(--page-top) 0, var(--bg) 440px);
       font-family: "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
     }
 
@@ -62,6 +120,23 @@
       letter-spacing: -.035em;
     }
 
+    .heading-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+    .theme-toggle {
+      display: inline-flex; align-items: center; justify-content: center;
+      flex: none; width: 38px; height: 38px; padding: 8px;
+      border: 1px solid var(--line); border-radius: 50%;
+      background: var(--surface); color: #6a7d74; cursor: pointer;
+    }
+    .theme-toggle:hover { background: var(--hover); }
+    .theme-toggle svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+    .theme-toggle .bulb-fill { fill: transparent; stroke: none; }
+    .theme-toggle .bulb-rays { opacity: .45; }
+    [data-theme="dark"] .theme-toggle { background: #24312d; border-color: #6f6343; color: #eed08a; }
+    [data-theme="dark"] .theme-toggle:hover { background: #2d3a32; border-color: #b19c64; }
+    [data-theme="dark"] .theme-toggle .bulb-fill { fill: #d8b96b; opacity: .28; }
+    [data-theme="dark"] .theme-toggle .bulb-rays { opacity: 1; }
+    button:focus-visible, input:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
+
     .subtitle {
       max-width: 760px;
       margin: 11px 0 0;
@@ -75,7 +150,7 @@
       padding: 13px 16px;
       border: 1px solid var(--line);
       border-radius: 12px;
-      background: rgba(255,255,255,.62);
+      background: var(--panel);
       color: var(--muted);
       font-size: 12px;
       line-height: 1.65;
@@ -92,7 +167,7 @@
     }
 
     .panel {
-      border: 1px solid rgba(214, 222, 227, .9);
+      border: 1px solid var(--panel-line);
       border-radius: 16px;
       background: var(--panel);
       box-shadow: var(--shadow);
@@ -108,7 +183,7 @@
       min-height: 0;
     }
 
-    .time-controls { flex-shrink: 0; padding: 12px; background: #fff; }
+    .time-controls { flex-shrink: 0; padding: 12px; background: var(--surface); }
     .time-label { margin-bottom: 8px; color: var(--muted); font-size: 12px; font-weight: 600; }
 
     .filter-panel {
@@ -135,16 +210,16 @@
     .filter-title h2, .overview-head h2 { margin: 0; font-size: 16px; }
     .clear {
       padding: 5px 10px;
-      border: 1px solid #d9dfe3;
+      border: 1px solid var(--line);
       border-radius: 7px;
-      background: #eef1f3;
-      color: #7e898f;
+      background: var(--subtle);
+      color: var(--muted);
       font-size: 12px;
       cursor: pointer;
       transition: .18s ease;
     }
     .clear.active {
-      border-color: #dca39d;
+      border-color: var(--red);
       background: var(--red-soft);
       color: var(--red);
     }
@@ -156,7 +231,7 @@
       border-radius: 9px;
       outline: none;
       background:
-        white
+        var(--surface)
         url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%23808b93' stroke-width='1.6'%3E%3Ccircle cx='7' cy='7' r='4.8'/%3E%3Cpath d='m11 11 4 4'/%3E%3C/svg%3E")
         no-repeat 11px center;
       font-size: 13px;
@@ -179,14 +254,14 @@
       padding: 0 7px;
       border-radius: 8px;
     }
-    .sector-row:hover { background: #f5f7f8; }
+    .sector-row:hover { background: var(--hover); }
 
     .toggle {
       width: 22px;
       padding: 0;
       border: 0;
       background: none;
-      color: #8b969e;
+      color: var(--faint);
       cursor: pointer;
       transition: transform .18s;
     }
@@ -197,20 +272,20 @@
       width: 16px;
       height: 16px;
       margin: 0;
-      border: 1.5px solid #b7c1c7;
+      border: 1.5px solid var(--line);
       border-radius: 4px;
-      background: white;
+      background: var(--surface);
       cursor: pointer;
     }
     .check:checked {
       border-color: var(--red);
       background: var(--red);
-      box-shadow: inset 0 0 0 3px white;
+      box-shadow: inset 0 0 0 3px var(--surface);
     }
 
     .sector-name { font-size: 13px; cursor: pointer; }
     .child-count {
-      color: #8b969e;
+      color: var(--faint);
       font-family: Georgia, serif;
       font-size: 11px;
       white-space: nowrap;
@@ -223,11 +298,11 @@
       align-items: center;
       gap: 9px;
       min-height: 32px;
-      color: #56636c;
+      color: var(--muted);
       font-size: 12px;
     }
     .child-mv {
-      color: #9ba4aa;
+      color: var(--faint);
       font-family: Georgia, serif;
       font-size: 10px;
       white-space: nowrap;
@@ -235,7 +310,7 @@
     .child-all {
       margin-bottom: 3px;
       padding-bottom: 3px;
-      border-bottom: 1px dashed #e3e8eb;
+      border-bottom: 1px dashed var(--soft-line);
       color: var(--ink);
       font-weight: 700;
     }
@@ -264,7 +339,7 @@
       padding: 3px;
       border: 1px solid var(--line);
       border-radius: 9px;
-      background: #f4f6f7;
+      background: var(--subtle);
     }
 
     .period {
@@ -280,7 +355,7 @@
       cursor: pointer;
     }
     .period.active {
-      background: white;
+      background: var(--surface);
       color: var(--ink);
       box-shadow: 0 2px 8px rgba(31,46,55,.1);
     }
@@ -312,7 +387,7 @@
       gap: 10px;
       min-height: 31px;
       padding: 6px 0;
-      border-bottom: 1px solid #edf0f2;
+      border-bottom: 1px solid var(--soft-line);
     }
     .metric-row:last-child { border-bottom: 0; }
     .metric-name {
@@ -330,7 +405,7 @@
     .metric-note { margin-left: 6px; font-family: inherit; font-size: 11px; }
     .metric-empty {
       padding: 12px 0 6px;
-      color: #9aa4aa;
+      color: var(--faint);
       font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
       font-size: 12px;
     }
@@ -392,9 +467,9 @@
     .module-kpi {
       min-height: 64px;
       padding: 10px 11px;
-      border: 1px solid #edf1f3;
+      border: 1px solid var(--soft-line);
       border-radius: 11px;
-      background: #fbfcfd;
+      background: var(--kpi-bg);
     }
 
     .module-kpi-label {
@@ -412,15 +487,15 @@
 
     .module-kpi-note {
       margin-left: 5px;
-      color: #9aa4aa;
+      color: var(--faint);
       font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
       font-size: 10px;
     }
 
     .module-scope { margin-bottom: 12px; color: var(--muted); font-size: 12px; }
     .module-controls { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
-    .module-measure { padding: 6px 12px; border: 1px solid var(--line); border-radius: 7px; background: #f4f6f7; color: var(--muted); cursor: pointer; }
-    .module-measure.active { background: var(--red-soft); color: var(--red); border-color: #edcbc7; }
+    .module-measure { padding: 6px 12px; border: 1px solid var(--line); border-radius: 7px; background: var(--subtle); color: var(--muted); cursor: pointer; }
+    .module-measure.active { background: var(--red-soft); color: var(--red); border-color: var(--red); }
     .module-kpi .metric-row { flex-wrap: wrap; }
     .module-kpi .metric-name { min-width: 0; white-space: normal; }
     .module-kpi .metric-number { font-size: 16px; }
@@ -437,7 +512,7 @@
       position: relative;
       height: 12px;
       border-radius: 3px;
-      background: #e9eef1;
+      background: var(--track);
     }
     .pe-bar-fill { height: 100%; border-radius: 3px; }
     .percentile-track {
@@ -515,28 +590,28 @@
     .company-section { margin-top: 12px; padding: 18px 20px; }
     .company-section > h2 { margin: 0 0 6px; font-size: 16px; }
     .company-intro, .company-summary, .company-note { color: var(--muted); font-size: 12px; line-height: 1.6; }
-    .company-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0; padding: 10px; background: #f2f5f6; border: 1px solid var(--line); border-radius: 10px; }
+    .company-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0; padding: 10px; background: var(--subtle); border: 1px solid var(--line); border-radius: 10px; }
     .company-tabs[hidden] { display: none; }
     .company-tab { display: inline-flex; align-items: center; gap: 12px; padding: 10px 14px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--muted); cursor: pointer; font: inherit; font-size: 12px; text-align: left; }
-    .company-tab.active { background: #fff; color: var(--ink); border-color: var(--line); box-shadow: 0 2px 5px rgba(25,43,54,.06); }
+    .company-tab.active { background: var(--surface); color: var(--ink); border-color: var(--line); box-shadow: 0 2px 5px rgba(25,43,54,.06); }
     .company-tab-count { color: var(--muted); font-size: 11px; }
     .company-tab-symbol { color: var(--red); font-size: 16px; }
     .company-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; margin: 20px 0 10px; }
     .company-head h3 { margin: 0; font-size: 15px; }
-    .company-search { width: min(100%, 260px); padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink); font: inherit; font-size: 12px; }
+    .company-search { width: min(100%, 260px); padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); font: inherit; font-size: 12px; }
     .company-table-wrap { max-height: 560px; overflow: auto; border: 1px solid var(--line); border-radius: 10px; margin-top: 12px; }
     .company-table { width: 100%; min-width: 620px; border-collapse: separate; border-spacing: 0; font-size: 13px; }
-    .company-table th { position: sticky; top: 0; background: #edf2f3; color: var(--muted); font-weight: 600; z-index: 1; }
-    .company-table th, .company-table td { padding: 13px 16px; border-bottom: 1px solid #edf1f3; text-align: left; white-space: nowrap; }
+    .company-table th { position: sticky; top: 0; background: var(--table-head); color: var(--muted); font-weight: 600; z-index: 1; }
+    .company-table th, .company-table td { padding: 13px 16px; border-bottom: 1px solid var(--soft-line); text-align: left; white-space: nowrap; }
     .company-table tbody tr:last-child td { border-bottom: 0; }
-    .company-table tbody tr:hover { background: #f8fafb; }
+    .company-table tbody tr:hover { background: var(--hover); }
     .company-table .numeric { text-align: right; font-variant-numeric: tabular-nums; }
     .company-table .empty { text-align: center; color: var(--muted); padding: 28px 16px; }
     .company-note { margin-top: 10px; font-size: 11px; }
 
     .footnote {
       margin-top: 11px;
-      color: #8c969d;
+      color: var(--faint);
       font-size: 10px;
       line-height: 1.6;
     }
@@ -563,7 +638,16 @@
     <header>
       <div>
         <div class="eyebrow">SECTOR RESEARCH / SW INDUSTRIES</div>
-        <h1>申万赛道研究总览</h1>
+        <div class="heading-row">
+          <h1>申万赛道研究总览</h1>
+          <button class="theme-toggle" id="themeToggle" type="button" aria-label="切换夜间模式" title="切换夜间模式" aria-pressed="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path class="bulb-fill" d="M8 14a6 6 0 1 1 8 0l-1 3H9z"/>
+              <path d="M8 14a6 6 0 1 1 8 0l-1 3H9zM9 20h6M10 23h4"/>
+              <path class="bulb-rays" d="M12 1V0M3 4l2 2M21 4l-2 2M1 11h2M21 11h2"/>
+            </svg>
+          </button>
+        </div>
         <p class="subtitle">从指数价格、滚动利润与估值三个维度观察行业周期。一级行业代表行业全貌，展开后可进一步聚焦具体二级赛道。</p>
       </div>
       <div class="asof">数据状态<strong>全页真实行情数据</strong><span id="dataAsOf">申万/市场：读取中</span></div>
@@ -748,10 +832,39 @@
       );
     }
 
-    const colors = ["#c94b42","#356f8c","#b28a43","#497768","#8a5e8d","#d17d3f"];
+    let colors;
+    let chartPalette;
+    function readThemePalette() {
+      const style = getComputedStyle(document.documentElement);
+      colors = Array.from({length: 6}, (_, i) => style.getPropertyValue(`--series-${i}`).trim());
+      chartPalette = { text: style.getPropertyValue("--faint").trim(), grid: style.getPropertyValue("--grid").trim() };
+    }
+    readThemePalette();
     const state = { years: 10, selections: [{ level: 1, parent: "电子", name: "电子" }] };
     const charts = [];
     const moduleCharts = [];
+    const themeButton = document.getElementById("themeToggle");
+    function syncThemeButton() {
+      const dark = document.documentElement.dataset.theme === "dark";
+      const label = dark ? "切换日间模式" : "切换夜间模式";
+      themeButton.setAttribute("aria-pressed", String(dark));
+      themeButton.setAttribute("aria-label", label);
+      themeButton.title = label;
+    }
+    function setTheme(theme) {
+      document.documentElement.dataset.theme = theme;
+      try { localStorage.setItem("2-BigAtotal2-theme", theme); } catch {}
+      readThemePalette();
+      syncThemeButton();
+      document.querySelectorAll(".tip").forEach(tip => tip.style.display = "none");
+      [...charts, ...moduleCharts].forEach(chart => chart.draw());
+      update();
+    }
+    themeButton.onclick = () => setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
+    window.addEventListener("storage", event => {
+      if (event.key === "2-BigAtotal2-theme") setTheme(event.newValue === "dark" ? "dark" : "light");
+    });
+    syncThemeButton();
     const moduleConfigs = [
       {
         id: 1, activeKey: "pe",
@@ -817,7 +930,7 @@
 
     function seriesColor(index) {
       if (index < colors.length) return colors[index];
-      return `hsl(${(index * 47 + 18) % 360} 48% ${42 + (index % 3) * 7}%)`;
+      return `hsl(${(index * 47 + 18) % 360} 48% ${(document.documentElement.dataset.theme === "dark" ? 64 : 42) + (index % 3) * 7}%)`;
     }
 
     function marketCap(name) {
@@ -1104,7 +1217,7 @@
         const W = rect.width, H = rect.height, pad = {l:48,r:64,t:12,b:40};
         const numericSeries = this.data.filter(s => s.values && s.values.some(v => Number.isFinite(v)));
         if (!numericSeries.length) {
-          x.fillStyle = "#9aa4aa";
+          x.fillStyle = chartPalette.text;
           x.font = "13px Microsoft YaHei";
           x.textAlign = "center";
           x.fillText(this.emptyMessage || "暂无足够真实数据", W / 2, H / 2);
@@ -1117,7 +1230,7 @@
         if (["亿", "亿股", "%"].includes(this.unit)) lo = Math.max(0, lo);
         if (this.percentile) { lo = 0; hi = 100; }
         this.geom = {W,H,pad,lo,hi};
-        x.font = "10px Microsoft YaHei"; x.fillStyle = "#89949b"; x.strokeStyle = "#e7ebee"; x.lineWidth = 1;
+        x.font = "10px Microsoft YaHei"; x.fillStyle = chartPalette.text; x.strokeStyle = chartPalette.grid; x.lineWidth = 1;
         x.textAlign = "left";
         for (let i=0;i<5;i++) {
           const y = pad.t + (H-pad.t-pad.b)*i/4;
